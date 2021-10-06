@@ -1,5 +1,5 @@
 # beacon_chain
-# Copyright (c) 2018-2021 Status Research & Development GmbH
+# Copyright (c) 2018-2022 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -332,6 +332,11 @@ type
               "API",
         defaultValue: false,
         name: "validator-api"}: bool
+
+      lightClientApiEnabled* {.
+        desc: "Enable the REST (BETA version) light client API",
+        defaultValue: false,
+        name: "light-client-api"}: bool
 
       inProcessValidators* {.
         desc: "Disable the push model (the beacon node tells a signing process with the private keys of the validators what to sign and when) and load the validators in the beacon node itself"

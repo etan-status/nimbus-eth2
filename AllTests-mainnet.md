@@ -230,6 +230,12 @@ OK: 3/3 Fail: 0/3 Skip: 0/3
 + [SCRYPT] Network Keystore encryption                                                       OK
 ```
 OK: 9/9 Fail: 0/9 Skip: 0/9
+## Light Client [Preset: mainnet]
+```diff
++ Light client sync                                                                          OK
++ Pre-Altair                                                                                 OK
+```
+OK: 2/2 Fail: 0/2 Skip: 0/2
 ## Message signatures
 ```diff
 + Aggregate and proof signatures                                                             OK
@@ -396,4 +402,4 @@ OK: 1/1 Fail: 0/1 Skip: 0/1
 OK: 1/1 Fail: 0/1 Skip: 0/1
 
 ---TOTAL---
-OK: 212/214 Fail: 0/214 Skip: 2/214
+OK: 214/216 Fail: 0/216 Skip: 2/216

@@ -55,6 +55,10 @@ template sync_committee_period*(epoch: Epoch): SyncCommitteePeriod =
 template sync_committee_period*(slot: Slot): SyncCommitteePeriod =
   sync_committee_period(epoch(slot))
 
+template compute_start_epoch_at_sync_committee_period*(
+    period: SyncCommitteePeriod): Epoch =
+  (period * EPOCHS_PER_SYNC_COMMITTEE_PERIOD).Epoch
+
 # https://github.com/ethereum/consensus-specs/blob/v1.1.6/specs/phase0/beacon-chain.md#compute_start_slot_at_epoch
 func compute_start_slot_at_epoch*(epoch: Epoch): Slot =
   ## Return the start slot of ``epoch``.

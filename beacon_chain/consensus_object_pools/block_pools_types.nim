@@ -1,5 +1,5 @@
 # beacon_chain
-# Copyright (c) 2018-2021 Status Research & Development GmbH
+# Copyright (c) 2018-2022 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -11,7 +11,7 @@ import
   # Standard library
   std/[options, sets, tables, hashes],
   # Status libraries
-  stew/endians2, chronicles,
+  stew/[bitops2, endians2], chronicles,
   # Internals
   ../spec/[signatures_batch, forks, helpers],
   ../spec/datatypes/[phase0, altair, merge],
@@ -62,6 +62,18 @@ type
     # At the time of writing, a Table[Eth2Digest, BlockRef] adds about 100mb of
     # unnecessary overhead.
     data: BlockRef
+
+  CachedLightClientData* = object
+    ## Cached data for creating future `LightClientUpdate` instances.
+    ## Includes a block's header, and select data from its post-state.
+    header*: BeaconBlockHeader
+
+    next_sync_committee*: SyncCommittee
+    next_sync_committee_branch*:
+      array[log2trunc(NEXT_SYNC_COMMITTEE_INDEX), Eth2Digest]
+
+    finalized_checkpoint*: Checkpoint
+    finality_branch*: array[log2trunc(FINALIZED_ROOT_INDEX), Eth2Digest]
 
   ChainDAGRef* = ref object
     ## Pool of blocks responsible for keeping a DAG of resolved blocks.
@@ -150,6 +162,9 @@ type
 
     cfg*: RuntimeConfig
 
+    createLightClientData*: bool ##\
+      ## Whether or not `LightClientUpdate` should be produced.
+
     epochRefs*: array[32, EpochRef] ##\
       ## Cached information about a particular epoch ending with the given
       ## block - we limit the number of held EpochRefs to put a cap on
@@ -160,6 +175,31 @@ type
       ## database. We use a ref type to facilitate sharing this small
       ## value with other components which don't have access to the
       ## full ChainDAG.
+
+    cachedLightClientData*: Table[Eth2Digest, CachedLightClientData] ##\
+      ## Cached data for creating future `LightClientUpdate` instances.
+
+    lightClientCheckpoints*: array[4, Checkpoint] ##\
+      ## Keeps track of the latest four `finalized_checkpoint` references
+      ## leading to `finalizedHead`. Used to prune `cachedLightClientData`.
+      ## Non-finalized states may only refer to these checkpoints.
+
+    lastLightClientCheckpointIndex*: int ##\
+      ## Last index that was modified in `lightClientCheckpoints`.
+
+    bestLightClientUpdates*: Table[SyncCommitteePeriod, LightClientUpdate] ##\
+      ## Stores the `LightClientUpdate` with the most `sync_committee_bits` per
+      ## `SyncCommitteePeriod`. Updates with finality proof have precedence.
+
+    latestFinalizedLightClientUpdate*: LightClientUpdate ##\
+      ## Stores the latest `LightClientUpdate` with a finality proof. Note that
+      ## if the sync committee refuses to sign new blocks that this may be older
+      ## than the most recent head (or even older than the finalized head).
+
+    latestNonFinalizedLightClientUpdate*: LightClientUpdate ##\
+      ## Stores the latest `LightClientUpdate` with no finality proof. Note that
+      ## if the sync committee refuses to sign new blocks that this may be older
+      ## than the most recent head (or even older than the finalized head).
 
     onBlockAdded*: OnBlockCallback
       ## On block added callback

@@ -224,3 +224,8 @@
 	url = https://github.com/status-im/nim-zlib.git
 	ignore = untracked
 	branch = master
+[submodule "vendor/eth2-light-client-demo"]
+	path = vendor/eth2-light-client-demo
+	url = https://github.com/ChainSafe/eth2-light-client-demo.git
+	ignore = untracked
+	branch = master

@@ -1,4 +1,5 @@
-# Copyright (c) 2018-2021 Status Research & Development GmbH
+# beacon_chain
+# Copyright (c) 2018-2022 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -14,9 +15,11 @@ import
   "."/[
     rest_utils,
     rest_beacon_api, rest_config_api, rest_debug_api, rest_event_api,
-    rest_nimbus_api, rest_node_api, rest_validator_api, rest_key_management_api]
+    rest_key_management_api, rest_light_client_api, rest_nimbus_api,
+    rest_node_api, rest_validator_api]
 
 export
   rest_utils,
   rest_beacon_api, rest_config_api, rest_debug_api, rest_event_api,
-  rest_nimbus_api, rest_node_api, rest_validator_api, rest_key_management_api
+  rest_key_management_api, rest_light_client_api, rest_nimbus_api,
+  rest_node_api, rest_validator_api

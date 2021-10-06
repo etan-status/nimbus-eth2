@@ -1,4 +1,5 @@
-# Copyright (c) 2018-2021 Status Research & Development GmbH
+# beacon_chain
+# Copyright (c) 2018-2022 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -310,7 +311,8 @@ proc init(T: type BeaconNode,
                      else: {}
     dag = ChainDAGRef.init(
       cfg, db, validatorMonitor, chainDagFlags, onBlockAdded, onHeadChanged,
-      onChainReorg, onFinalization)
+      onChainReorg, onFinalization,
+      createLightClientData = config.lightClientApiEnabled)
     quarantine = newClone(Quarantine.init())
     databaseGenesisValidatorsRoot =
       getStateField(dag.headState.data, genesis_validators_root)
@@ -995,6 +997,8 @@ proc installRestHandlers(restServer: RestServerRef, node: BeaconNode) =
   restServer.router.installValidatorApiHandlers(node)
   if node.config.validatorApiEnabled:
     restServer.router.installValidatorManagementHandlers(node)
+  if node.config.lightClientApiEnabled:
+    restServer.router.installLightClientApiHandlers(node)
 
 proc installMessageValidators(node: BeaconNode) =
   # https://github.com/ethereum/consensus-specs/blob/v1.1.6/specs/phase0/p2p-interface.md#attestations-and-aggregation

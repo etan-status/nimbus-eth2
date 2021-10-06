@@ -1,5 +1,5 @@
 # beacon_chain
-# Copyright (c) 2021 Status Research & Development GmbH
+# Copyright (c) 2021, 2022 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -55,6 +55,11 @@ const
   # https://github.com/ethereum/consensus-specs/blob/v1.1.6/setup.py#L478-L479
   FINALIZED_ROOT_INDEX* = 105.GeneralizedIndex
   NEXT_SYNC_COMMITTEE_INDEX* = 55.GeneralizedIndex
+
+  # https://github.com/ChainSafe/lodestar/blob/v0.32.0/packages/lodestar/src/chain/lightClient/LightClientIniter.ts#L19-L28
+  GENESIS_TIME_INDEX* = 32.GeneralizedIndex
+  GENESIS_VALIDATORS_ROOT_INDEX* = 33.GeneralizedIndex
+  CURRENT_SYNC_COMMITTEE_INDEX* = 54.GeneralizedIndex
 
   # https://github.com/ethereum/consensus-specs/blob/v1.1.6/specs/altair/beacon-chain.md#participation-flag-indices
   TIMELY_SOURCE_FLAG_INDEX* = 0
