@@ -211,9 +211,9 @@
 	url = https://github.com/status-im/nim-taskpools
 [submodule "vendor/nim-ssz-serialization"]
 	path = vendor/nim-ssz-serialization
-	url = https://github.com/status-im/nim-ssz-serialization.git
+	url = https://github.com/etan-status/nim-ssz-serialization.git
 	ignore = untracked
-	branch = master
+	branch = merkle-multiproof
 [submodule "vendor/nim-websock"]
 	path = vendor/nim-websock
 	url = https://github.com/status-im/nim-websock.git

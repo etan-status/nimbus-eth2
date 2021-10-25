@@ -1,5 +1,5 @@
 # beacon_chain
-# Copyright (c) 2021 Status Research & Development GmbH
+# Copyright (c) 2021, 2022 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -175,9 +175,8 @@ suite "Ethereum Foundation - Altair - Unittests - Sync protocol" & preset():
         forked[], committee, block_root = block_header.hash_tree_root())
 
     # Sync committee is updated
-    var next_sync_committee_branch {.noinit.}:
-      array[log2trunc(NEXT_SYNC_COMMITTEE_INDEX), Eth2Digest]
-    build_proof(state, NEXT_SYNC_COMMITTEE_INDEX, next_sync_committee_branch)
+    let next_sync_committee_branch =
+      build_proof(state, NEXT_SYNC_COMMITTEE_INDEX).get
     # Finality is unchanged
     let finality_header = BeaconBlockHeader()
     var finality_branch: array[log2trunc(FINALIZED_ROOT_INDEX), Eth2Digest]
@@ -245,9 +244,7 @@ suite "Ethereum Foundation - Altair - Unittests - Sync protocol" & preset():
         compute_start_slot_at_epoch(state.finalized_checkpoint.epoch)
       finalized_block_header.hash_tree_root() ==
         state.finalized_checkpoint.root
-    var finality_branch {.noinit.}:
-      array[log2trunc(FINALIZED_ROOT_INDEX), Eth2Digest]
-    build_proof(state, FINALIZED_ROOT_INDEX, finality_branch)
+    let finality_branch = build_proof(state, FINALIZED_ROOT_INDEX).get
 
     # Build block header
     let
