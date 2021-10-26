@@ -22,6 +22,7 @@ import
 
 export options, tables, phase0, altair, merge, blockchain_dag, fork_choice
 
+
 const
   ATTESTATION_LOOKBACK* =
     min(24'u64, SLOTS_PER_EPOCH) + MIN_ATTESTATION_INCLUSION_DELAY
