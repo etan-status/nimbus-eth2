@@ -230,7 +230,7 @@ OK: 3/3 Fail: 0/3 Skip: 0/3
 + [SCRYPT] Network Keystore encryption                                                       OK
 ```
 OK: 9/9 Fail: 0/9 Skip: 0/9
-## Light Client [Preset: mainnet]
+## Light client [Preset: mainnet]
 ```diff
 + Light client sync                                                                          OK
 + Pre-Altair                                                                                 OK

@@ -162,6 +162,8 @@ proc init(T: type BeaconNode,
     eventBus.emit("finalization", data)
   proc onSyncContribution(data: SignedContributionAndProof) =
     eventBus.emit("sync-contribution-and-proof", data)
+  proc onLightClientHeaderUpdate(data: LightClientHeaderUpdate) =
+    eventBus.emit("light-client-header-update", data)
 
   if config.finalizedCheckpointState.isSome:
     let checkpointStatePath = config.finalizedCheckpointState.get.string
@@ -308,10 +310,13 @@ proc init(T: type BeaconNode,
 
   let
     chainDagFlags = if config.verifyFinalization: {verifyFinalization}
-                     else: {}
+                    else: {}
+    onLightClientHeaderUpdateCb =
+      if config.lightClientApiEnabled: onLightClientHeaderUpdate
+      else: nil
     dag = ChainDAGRef.init(
       cfg, db, validatorMonitor, chainDagFlags, onBlockAdded, onHeadChanged,
-      onChainReorg, onFinalization,
+      onChainReorg, onFinalization, onLightClientHeaderUpdateCb,
       createLightClientData = config.lightClientApiEnabled)
     quarantine = newClone(Quarantine.init())
     databaseGenesisValidatorsRoot =

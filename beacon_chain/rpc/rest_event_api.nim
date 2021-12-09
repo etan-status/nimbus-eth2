@@ -1,4 +1,5 @@
-# Copyright (c) 2018-2020 Status Research & Development GmbH
+# beacon_chain
+# Copyright (c) 2018-2022 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -14,9 +15,10 @@ export rest_utils
 
 logScope: topics = "rest_eventapi"
 
-proc validateEventTopics(events: seq[EventTopic]): Result[EventTopics,
-                                                          cstring] =
+proc validateEventTopics(events: seq[EventTopic],
+                         withLightClient: bool): Result[EventTopics, cstring] =
   const NonUniqueError = cstring("Event topics must be unique")
+  const UnsupportedError = cstring("Unsupported event topic value")
   var res: set[EventTopic]
   for item in events:
     case item
@@ -48,6 +50,12 @@ proc validateEventTopics(events: seq[EventTopic]): Result[EventTopics,
       if EventTopic.ContributionAndProof in res:
         return err(NonUniqueError)
       res.incl(EventTopic.ContributionAndProof)
+    of EventTopic.LightClientHeaderUpdate:
+      if not withLightClient:
+        return err(UnsupportedError)
+      if EventTopic.LightClientHeaderUpdate in res:
+        return err(NonUniqueError)
+      res.incl(EventTopic.LightClientHeaderUpdate)
   if res == {}:
     err("Empty topics list")
   else:
@@ -94,7 +102,10 @@ proc eventHandler*(response: HttpResponseRef, node: BeaconNode,
       break
 
 proc installEventApiHandlers*(router: var RestRouter, node: BeaconNode) =
+  let lightClientApiEnabled = node.config.lightClientApiEnabled
+
   # https://ethereum.github.io/beacon-APIs/#/Events/eventstream
+  # https://github.com/ChainSafe/lodestar/blob/22c2667d5/packages/api/src/routes/events.ts#L30-L31
   router.api(MethodGet, "/api/eth/v1/events") do (
     topics: seq[EventTopic]) -> RestApiResponse:
     let eventTopics =
@@ -102,7 +113,8 @@ proc installEventApiHandlers*(router: var RestRouter, node: BeaconNode) =
         if topics.isErr():
           return RestApiResponse.jsonError(Http400, "Invalid topics value",
                                            $topics.error())
-        let res = validateEventTopics(topics.get())
+        let res = validateEventTopics(topics.get(),
+                                      withLightClient = lightClientApiEnabled)
         if res.isErr():
           return RestApiResponse.jsonError(Http400, "Invalid topics value",
                                            $res.error())
@@ -158,6 +170,12 @@ proc installEventApiHandlers*(router: var RestRouter, node: BeaconNode) =
           let handler = response.eventHandler(node, SignedContributionAndProof,
                                               "sync-contribution-and-proof",
                                               "contribution_and_proof")
+          res.add(handler)
+        if EventTopic.LightClientHeaderUpdate in eventTopics:
+          doAssert lightClientApiEnabled
+          let handler = response.eventHandler(node, LightClientHeaderUpdate,
+                                              "light-client-header-update",
+                                              "lightclient_header_update")
           res.add(handler)
         res
 

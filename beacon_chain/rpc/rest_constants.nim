@@ -196,9 +196,9 @@ const
     "Missing `to` value"
   InvalidSyncPeriodError* =
     "Invalid sync period requested"
-  LightClientUpdateUnavailable* =
-    "LightClientUpdate unavailable"
   InvalidBlockRootValueError* =
     "Invalid block root value"
-  LightClientInitProofUnavailable* =
-    "No init proof available"
+  LightClientHeaderUpdateUnavailable* =
+    "LightClientHeaderUpdate unavailable"
+  LightClientSnapshotUnavailable* =
+    "No snapshot available for given block root"

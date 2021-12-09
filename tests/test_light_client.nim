@@ -8,8 +8,6 @@
 {.used.}
 
 import
-  # Standard library
-  algorithm,
   # Status libraries
   chronicles, eth/keys, taskpools,
   # Beacon chain internals
@@ -19,7 +17,7 @@ import
   # Test utilities
   ./testutil, ./testdbutil
 
-suite "Light Client" & preset():
+suite "Light client" & preset():
   let
     cfg = block:
       var res = defaultRuntimeConfig
@@ -88,24 +86,21 @@ suite "Light Client" & preset():
     check:
       dag.headState.data.kind == BeaconStateFork.Phase0
       dag.getBestLightClientUpdateForPeriod(0.SyncCommitteePeriod).isNone
-      dag.getLatestFinalizedLightClientUpdate.isNone
-      dag.getLatestNonFinalizedLightClientUpdate.isNone
+      dag.getLatestLightClientUpdate.isNone
 
     # Advance to last slot before Altair.
     dag.advanceToSlot(altairStartSlot - 1, verifier, quarantine[])
     check:
       dag.headState.data.kind == BeaconStateFork.Phase0
       dag.getBestLightClientUpdateForPeriod(0.SyncCommitteePeriod).isNone
-      dag.getLatestFinalizedLightClientUpdate.isNone
-      dag.getLatestNonFinalizedLightClientUpdate.isNone
+      dag.getLatestLightClientUpdate.isNone
 
     # Advance to Altair.
     dag.advanceToSlot(altairStartSlot, verifier, quarantine[])
     check:
       dag.headState.data.kind == BeaconStateFork.Altair
       dag.getBestLightClientUpdateForPeriod(0.SyncCommitteePeriod).isNone
-      dag.getLatestFinalizedLightClientUpdate.isNone
-      dag.getLatestNonFinalizedLightClientUpdate.isNone
+      dag.getLatestLightClientUpdate.isNone
 
   test "Light client sync":
     # Advance to Altair.
@@ -132,7 +127,7 @@ suite "Light Client" & preset():
     let currentSlot = getStateField(dag.headState.data, slot)
 
     # Sync to latest sync committee period.
-    while store.snapshot.header.slot.sync_committee_period + 1 < headPeriod:
+    while store.snapshot.header.slot.sync_committee_period < headPeriod:
       let
         nextPeriod = store.snapshot.header.slot.sync_committee_period + 1
         bestUpdate = dag.getBestLightClientUpdateForPeriod(nextPeriod)
@@ -143,24 +138,21 @@ suite "Light Client" & preset():
           store, bestUpdate.get, currentSlot, genesis_validators_root)
         store.snapshot.header == bestUpdate.get.header
 
-    # Sync to latest finalized update.
-    var latestFinalized = dag.getLatestFinalizedLightClientUpdate
+    # Sync to latest update.
+    let latestHeaderUpdate = dag.getLatestLightClientUpdate
+    check: latestHeaderUpdate.isSome
+    let latestUpdate = LightClientUpdate(
+      header:
+        latestHeaderUpdate.get.header,
+      sync_committee_bits:
+        latestHeaderUpdate.get.sync_aggregate.sync_committee_bits,
+      sync_committee_signature:
+        latestHeaderUpdate.get.sync_aggregate.sync_committee_signature,
+      fork_version:
+        cfg.forkVersionAtEpoch(latestHeaderUpdate.get.header.slot.epoch))
     check:
-      latestFinalized.isSome
-      latestFinalized.get.header.slot == dag.finalizedHead.blck.slot
+      latestUpdate.header.slot == dag.headState.blck.parent.slot
       process_light_client_update(
-        store, latestFinalized.get, currentSlot, genesis_validators_root)
-      store.snapshot.header == latestFinalized.get.header
-
-    # Sync to latest non-finalized update.
-    var latestNonFinalized = dag.getLatestNonFinalizedLightClientUpdate
-    check: latestNonFinalized.isSome
-    latestNonFinalized.get.next_sync_committee = SyncCommittee()
-    latestNonFinalized.get.next_sync_committee_branch.fill(Eth2Digest())
-    check:
-      latestNonFinalized.get.header.slot == dag.headState.blck.parent.slot
-      process_light_client_update(
-        store, latestNonFinalized.get, currentSlot, genesis_validators_root)
-      store.snapshot.header == latestFinalized.get.header
+        store, latestUpdate, currentSlot, genesis_validators_root)
       store.valid_updates.len == 1
-      latestNonFinalized.get in store.valid_updates
+      latestUpdate in store.valid_updates

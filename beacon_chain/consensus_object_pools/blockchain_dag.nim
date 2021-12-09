@@ -175,6 +175,9 @@ proc createLightClientUpdates(
     signedData = dag.getLightClientData(parent.root)
     oldBestUpdate = dag.bestLightClientUpdates.getOrDefault(signedPeriod)
     numOldBestParticipants = countOnes(oldBestUpdate.sync_committee_bits)
+    oldLatestUpdate = addr dag.latestLightClientUpdate
+    numOldLatestParticipants =
+      countOnes(oldLatestUpdate[].sync_aggregate.sync_committee_bits)
 
   # Create finalized `LightClientUpdate`.
   var finalizedUpdateIsBest = false
@@ -196,19 +199,7 @@ proc createLightClientUpdates(
             numParticipants > numOldBestParticipants
           else:
             signedSlot < oldBestUpdate.finalityHeader.slot
-        isLaterUpdate = block:
-          let
-            oldUpdate = addr dag.latestFinalizedLightClientUpdate
-            numOldParticipants = countOnes(oldUpdate[].sync_committee_bits)
-          if numOldParticipants < MIN_SYNC_COMMITTEE_PARTICIPANTS:
-            true
-          elif finalizedSlot != oldUpdate[].header.slot:
-            finalizedSlot > oldUpdate[].header.slot
-          elif signedSlot != oldUpdate[].finalityHeader.slot:
-            signedSlot < oldUpdate[].finalityHeader.slot:
-          else:
-            numParticipants > numOldParticipants
-      if isBetterUpdate or isLaterUpdate:
+      if isBetterUpdate:
         let finalizedData = dag.getLightClientData(finalizedRoot)
         update.header =
           finalizedData.header
@@ -224,8 +215,6 @@ proc createLightClientUpdates(
         if isBetterUpdate:
           dag.bestLightClientUpdates[finalizedPeriod] = update
           finalizedUpdateIsBest = true
-        if isLaterUpdate:
-          dag.latestFinalizedLightClientUpdate = update
 
   # Create non-finalized `LightClientUpdate`.
   let
@@ -241,15 +230,12 @@ proc createLightClientUpdates(
       else:
         signedSlot < oldBestUpdate.header.slot
     isLaterUpdate = block:
-      let
-        oldUpdate = addr dag.latestNonFinalizedLightClientUpdate
-        numOldParticipants = countOnes(oldUpdate[].sync_committee_bits)
-      if numOldParticipants < MIN_SYNC_COMMITTEE_PARTICIPANTS:
+      if numOldLatestParticipants < MIN_SYNC_COMMITTEE_PARTICIPANTS:
         true
-      elif signedSlot != oldUpdate[].header.slot:
-        signedSlot > oldUpdate[].header.slot:
+      elif signedSlot != oldLatestUpdate[].header.slot:
+        signedSlot > oldLatestUpdate[].header.slot:
       else:
-        numParticipants > countOnes(oldUpdate[].sync_committee_bits)
+        numParticipants > numOldLatestParticipants
   if isBetterUpdate or isLaterUpdate:
     update.header =
       signedData.header
@@ -265,13 +251,20 @@ proc createLightClientUpdates(
     if isBetterUpdate:
       dag.bestLightClientUpdates[signedPeriod] = update
     if isLaterUpdate:
-      dag.latestNonFinalizedLightClientUpdate = update
+      dag.latestLightClientUpdate = LightClientHeaderUpdate(
+        sync_aggregate: SyncAggregate(
+          sync_committee_bits: update.sync_committee_bits,
+          sync_committee_signature: update.sync_committee_signature),
+        header: update.header)
 
   let endTick = Moment.now()
   if endTick - startTick > 100.milliseconds:
     debug "Creating `LightClientUpdate` took longer than usual",
       root = dag.head.root, slot = dag.head.slot,
       createDur = endTick - startTick
+
+  if isLaterUpdate and dag.onLightClientHeaderUpdate != nil:
+    dag.onLightClientHeaderUpdate(dag.latestLightClientUpdate)
 
 proc putBackfillBlock*(
     dag: ChainDAGRef,
@@ -596,7 +589,10 @@ proc init*(T: type ChainDAGRef, cfg: RuntimeConfig, db: BeaconChainDB,
            onBlockCb: OnBlockCallback = nil, onHeadCb: OnHeadCallback = nil,
            onReorgCb: OnReorgCallback = nil,
            onFinCb: OnFinalizedCallback = nil,
+           onLightClientHeaderUpdateCb: OnLightClientHeaderUpdateCallback = nil,
            createLightClientData = false): ChainDAGRef =
+  if onLightClientHeaderUpdateCb != nil: doAssert createLightClientData
+
   # TODO we require that the db contains both a head and a tail block -
   #      asserting here doesn't seem like the right way to go about it however..
 
@@ -756,7 +752,8 @@ proc init*(T: type ChainDAGRef, cfg: RuntimeConfig, db: BeaconChainDB,
     onBlockAdded: onBlockCb,
     onHeadChanged: onHeadCb,
     onReorgHappened: onReorgCb,
-    onFinHappened: onFinCb
+    onFinHappened: onFinCb,
+    onLightClientHeaderUpdate: onLightClientHeaderUpdateCb
   )
 
   let forkVersions =
@@ -2024,20 +2021,11 @@ proc getBestLightClientUpdateForPeriod*(
   if numParticipants < MIN_SYNC_COMMITTEE_PARTICIPANTS:
     result = none(LightClientUpdate)
 
-proc getLatestFinalizedLightClientUpdate*(
-    dag: ChainDAGRef): Option[LightClientUpdate] =
-  if not dag.createLightClientData: return none(LightClientUpdate)
+proc getLatestLightClientUpdate*(
+    dag: ChainDAGRef): Option[LightClientHeaderUpdate] =
+  if not dag.createLightClientData: return none(LightClientHeaderUpdate)
 
-  result = some(dag.latestFinalizedLightClientUpdate)
-  let numParticipants = countOnes(result.get.sync_committee_bits)
+  result = some(dag.latestLightClientUpdate)
+  let numParticipants = countOnes(result.get.sync_aggregate.sync_committee_bits)
   if numParticipants < MIN_SYNC_COMMITTEE_PARTICIPANTS:
-    result = none(LightClientUpdate)
-
-proc getLatestNonFinalizedLightClientUpdate*(
-    dag: ChainDAGRef): Option[LightClientUpdate] =
-  if not dag.createLightClientData: return none(LightClientUpdate)
-
-  result = some(dag.latestNonFinalizedLightClientUpdate)
-  let numParticipants = countOnes(result.get.sync_committee_bits)
-  if numParticipants < MIN_SYNC_COMMITTEE_PARTICIPANTS:
-    result = none(LightClientUpdate)
+    result = none(LightClientHeaderUpdate)

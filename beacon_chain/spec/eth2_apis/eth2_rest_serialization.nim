@@ -1523,6 +1523,8 @@ proc decodeString*(t: typedesc[EventTopic],
     ok(EventTopic.ChainReorg)
   of "contribution_and_proof":
     ok(EventTopic.ContributionAndProof)
+  of "lightclient_header_update":
+    ok(EventTopic.LightClientHeaderUpdate)
   else:
     err("Incorrect event's topic value")
 

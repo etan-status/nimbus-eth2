@@ -15,7 +15,7 @@
 
 import
   std/[json, typetraits],
-  stew/base10, web3/ethtypes,
+  stew/[base10, bitops2], web3/ethtypes,
   ".."/forks,
   ".."/datatypes/[phase0, altair]
 
@@ -29,7 +29,10 @@ const
 type
   EventTopic* {.pure.} = enum
     Head, Block, Attestation, VoluntaryExit, FinalizedCheckpoint, ChainReorg,
-    ContributionAndProof
+    ContributionAndProof,
+
+    # https://github.com/ChainSafe/lodestar/blob/22c2667d5/packages/api/src/routes/events.ts#L30-L31
+    LightClientHeaderUpdate
 
   EventTopics* = set[EventTopic]
 
@@ -390,6 +393,13 @@ type
   RestEpochSyncCommittee* = object
     validators*: seq[ValidatorIndex]
     validator_aggregates*: seq[seq[ValidatorIndex]]
+
+  # https://github.com/ChainSafe/lodestar/blob/22c2667d5/packages/api/src/routes/lightclient.ts#L23-L28
+  RestLightClientSnapshot* = object
+    header*: BeaconBlockHeader
+    current_sync_committee*: SyncCommittee
+    current_sync_committee_branch*:
+      array[log2trunc(CURRENT_SYNC_COMMITTEE_INDEX), Eth2Digest]
 
   DataEnclosedObject*[T] = object
     data*: T

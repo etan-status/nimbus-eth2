@@ -56,9 +56,7 @@ const
   FINALIZED_ROOT_INDEX* = 105.GeneralizedIndex
   NEXT_SYNC_COMMITTEE_INDEX* = 55.GeneralizedIndex
 
-  # https://github.com/ChainSafe/lodestar/blob/v0.32.0/packages/lodestar/src/chain/lightClient/LightClientIniter.ts#L19-L28
-  GENESIS_TIME_INDEX* = 32.GeneralizedIndex
-  GENESIS_VALIDATORS_ROOT_INDEX* = 33.GeneralizedIndex
+  # https://github.com/ChainSafe/lodestar/blob/22c2667d5/packages/lodestar/src/chain/lightClient/proofs.ts#L12
   CURRENT_SYNC_COMMITTEE_INDEX* = 54.GeneralizedIndex
 
   # https://github.com/ethereum/consensus-specs/blob/v1.1.6/specs/altair/beacon-chain.md#participation-flag-indices

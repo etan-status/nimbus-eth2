@@ -52,6 +52,8 @@ type
     proc(data: ReorgInfoObject) {.gcsafe, raises: [Defect].}
   OnFinalizedCallback* =
     proc(data: FinalizationInfoObject) {.gcsafe, raises: [Defect].}
+  OnLightClientHeaderUpdateCallback* =
+    proc(data: LightClientHeaderUpdate) {.gcsafe, raises: [Defect].}
 
   FetchRecord* = object
     root*: Eth2Digest
@@ -189,16 +191,11 @@ type
 
     bestLightClientUpdates*: Table[SyncCommitteePeriod, LightClientUpdate] ##\
       ## Stores the `LightClientUpdate` with the most `sync_committee_bits` per
-      ## `SyncCommitteePeriod`. Updates with finality proof have precedence.
+      ## `SyncCommitteePeriod`. Updates with a finality proof have precedence.
 
-    latestFinalizedLightClientUpdate*: LightClientUpdate ##\
-      ## Stores the latest `LightClientUpdate` with a finality proof. Note that
-      ## if the sync committee refuses to sign new blocks that this may be older
-      ## than the most recent head (or even older than the finalized head).
-
-    latestNonFinalizedLightClientUpdate*: LightClientUpdate ##\
-      ## Stores the latest `LightClientUpdate` with no finality proof. Note that
-      ## if the sync committee refuses to sign new blocks that this may be older
+    latestLightClientUpdate*: LightClientHeaderUpdate ##\
+      ## Stores the `LightClientHeaderUpdate` for the latest slot. Note that if
+      ## the sync committee refuses to sign new blocks that this may be older
       ## than the most recent head (or even older than the finalized head).
 
     onBlockAdded*: OnBlockCallback
@@ -209,6 +206,8 @@ type
       ## On beacon chain reorganization
     onFinHappened*: OnFinalizedCallback
       ## On finalization callback
+    onLightClientHeaderUpdate*: OnLightClientHeaderUpdateCallback
+      ## On light client header update
 
     headSyncCommittees*: SyncCommitteeCache ##\
       ## A cache of the sync committees, as they appear in the head state -
@@ -289,6 +288,11 @@ type
     block_root* {.serializedFieldName: "block".}: Eth2Digest
     state_root* {.serializedFieldName: "state".}: Eth2Digest
     epoch*: Epoch
+
+  # https://github.com/ChainSafe/lodestar/blob/22c2667d5/packages/api/src/routes/events.ts#L7-L10
+  LightClientHeaderUpdate* = object
+    sync_aggregate*: SyncAggregate
+    header*: BeaconBlockHeader
 
 template head*(dag: ChainDAGRef): BlockRef = dag.headState.blck
 
