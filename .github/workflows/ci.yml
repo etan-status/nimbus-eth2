@@ -112,6 +112,15 @@ jobs:
             mingw-w64-x86_64-toolchain
             mingw-w64-x86_64-cmake
 
+      # Shorten path length for some tests
+      - name: Subst workspace path (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          echo "${{ github.workspace }}"
+          cd
+          subst n: "${{ github.workspace }}"
+          n:
+
       - name: Restore Nim DLLs dependencies (Windows) from cache
         if: runner.os == 'Windows'
         id: windows-dlls-cache
