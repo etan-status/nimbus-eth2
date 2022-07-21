@@ -1546,6 +1546,7 @@ proc stop(node: BeaconNode) =
     warn "Couldn't stop network", msg = exc.msg
 
   node.attachedValidators.slashingProtection.close()
+  node.attachedValidators[].close()
   node.db.close()
   notice "Databases closed"
 
