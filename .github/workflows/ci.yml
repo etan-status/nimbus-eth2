@@ -16,28 +16,14 @@ jobs:
       fail-fast: false
       matrix:
         target:
-          - os: linux
-            cpu: amd64
-          - os: linux
-            cpu: i386
           - os: macos
             cpu: amd64
-          - os: windows
-            cpu: amd64
-        branch: [version-1-2, version-1-6]
+        branch: [version-1-6]
         include:
-          - target:
-              os: linux
-            builder: ubuntu-18.04
-            shell: bash
           - target:
               os: macos
             builder: macos-12
             shell: bash
-          - target:
-              os: windows
-            builder: windows-2019
-            shell: msys2 {0}
 
     defaults:
       run:
@@ -208,26 +194,6 @@ jobs:
       - name: Get the Ethereum Foundation fixtures
         run: |
           scripts/setup_scenarios.sh fixturesCache
-
-      - name: Smoke test the Beacon Node and Validator Client with all tracing enabled
-        run: |
-          if [[ "${{ matrix.branch }}" == "version-1-6" ]]; then
-            # change to "|| true" to hide the CI failures in GitHub's UI (escape hatch if a blocker is detected in 1.6)
-            ${make_cmd} -j ${ncpu} V=1 NIM_COMMIT=${{ matrix.branch }} LOG_LEVEL=TRACE nimbus_beacon_node nimbus_validator_client || false
-          else
-            ${make_cmd} -j ${ncpu} V=1 NIM_COMMIT=${{ matrix.branch }} LOG_LEVEL=TRACE nimbus_beacon_node nimbus_validator_client
-          fi
-
-      - name: Build all tools
-        run: |
-          if [[ "${{ matrix.branch }}" == "version-1-6" ]]; then
-            # change to "|| true" to hide the CI failures in GitHub's UI (escape hatch if a blocker is detected in 1.6)
-            ${make_cmd} -j ${ncpu} V=1 NIM_COMMIT=${{ matrix.branch }} || false
-          else
-            ${make_cmd} -j ${ncpu} V=1 NIM_COMMIT=${{ matrix.branch }}
-          fi
-          # The Windows image runs out of disk space, so make some room
-          rm -rf nimcache
 
       - name: Run tests
         run: |

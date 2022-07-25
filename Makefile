@@ -221,14 +221,10 @@ local-testnet-mainnet:
 
 # test binaries that can output an XML report
 XML_TEST_BINARIES := \
-	consensus_spec_tests_mainnet \
-	consensus_spec_tests_minimal \
 	all_tests
 
 # test suite
-TEST_BINARIES := \
-	state_sim \
-	block_sim
+TEST_BINARIES := 
 .PHONY: $(TEST_BINARIES) $(XML_TEST_BINARIES)
 
 # Preset-dependent tests
