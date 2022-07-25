@@ -615,10 +615,17 @@ iterator listLoadableKeys*(validatorsDir, secretsDir: string,
           # Skip folders which name do not satisfy "0x[a-fA-F0-9]{96, 96}".
           continue
 
-        if not(((KeystoreKind.Local in keysMask) and
-             fileExists(keystoreDir / KeystoreFileName)) or
-           ((KeystoreKind.Remote in keysMask) and
-             fileExists(keystoreDir / RemoteKeystoreFileName))):
+        error "listing loadable keys",
+          validatorsDir, secretsDir, keysMask,
+          localFile = fileExists(keystoreDir / KeystoreFileName),
+          remoteFile = fileExists(keystoreDir / RemoteKeystoreFileName),
+          exists = existsKeystore(keystoreDir, keysMask)
+
+        # if not(((KeystoreKind.Local in keysMask) and
+        #      fileExists(keystoreDir / KeystoreFileName)) or
+        #    ((KeystoreKind.Remote in keysMask) and
+        #      fileExists(keystoreDir / RemoteKeystoreFileName))):
+        if not(existsKeystore(keystoreDir, keysMask)):
           # Skip folder which do not satisfy `keysMask`.
           continue
 
