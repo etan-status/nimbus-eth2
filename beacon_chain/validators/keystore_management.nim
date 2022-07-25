@@ -645,7 +645,7 @@ iterator listLoadableKeys*(validatorsDir, secretsDir: string,
 
         let cookedKey =
           block:
-            echo "cooking pubkey: ", $publicKey
+            # echo "cooking pubkey: ", $publicKey
             let res = publicKey.load()
             if res.isNone():
               # Skip folders which has invalid ValidatorPubKey.
