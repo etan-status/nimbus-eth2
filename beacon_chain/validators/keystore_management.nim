@@ -453,6 +453,7 @@ proc loadLocalKeystoreImpl(validatorsDir, secretsDir, keyName: string,
 
     let res = decryptKeystore(keystore, passphrase)
     if res.isOk():
+      success = true
       return some(KeystoreData.init(res.get(), keystore, handle))
     else:
       error "Failed to decrypt keystore", key_path = keystorePath,
@@ -603,8 +604,10 @@ proc existsKeystore*(keystoreDir: string,
 
 iterator listLoadableKeys*(validatorsDir, secretsDir: string,
                            keysMask: set[KeystoreKind]): CookedPubKey =
+  echo "listLoadableKeys", validatorsDir, secretsDir, $keysMask
   try:
     for kind, file in walkDir(validatorsDir):
+      echo "---------> ", " -- ", $kind, " -- ", $file
       if kind == pcDir:
         let
           keyName = splitFile(file).name
@@ -615,11 +618,14 @@ iterator listLoadableKeys*(validatorsDir, secretsDir: string,
           # Skip folders which name do not satisfy "0x[a-fA-F0-9]{96, 96}".
           continue
 
-        error "listing loadable keys",
-          validatorsDir, secretsDir, keysMask,
-          localFile = fileExists(keystoreDir / KeystoreFileName),
-          remoteFile = fileExists(keystoreDir / RemoteKeystoreFileName),
-          exists = existsKeystore(keystoreDir, keysMask)
+        echo "listing loadable keys", " -- ",
+          $validatorsDir, " -- ", $secretsDir, " -- ", $keysMask, " -- ",
+          $keystoreDir, " -- ", $KeystoreFileName, " -- ", $RemoteKeystoreFileName, " -- ",
+          $(keystoreDir / KeystoreFileName), " -- ",
+          $(keystoreDir / RemoteKeystoreFileName), " -- ",
+          $fileExists(keystoreDir / KeystoreFileName), " -- ",
+          $fileExists(keystoreDir / RemoteKeystoreFileName), " -- ",
+          $existsKeystore(keystoreDir, keysMask)
 
         # if not(((KeystoreKind.Local in keysMask) and
         #      fileExists(keystoreDir / KeystoreFileName)) or
