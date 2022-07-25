@@ -657,7 +657,9 @@ iterator listLoadableKeys*(validatorsDir, secretsDir: string,
           echo "ERROR ERROR ERROR"
           echo "keyName: ", $keyName
           echo "kres: ", $kres
+          echo "publicKey: ", $publicKey
           echo "cres: ", $cres
+          echo "cookedKey: ", $cookedKey
           doAssert false
 
         yield cookedKey
