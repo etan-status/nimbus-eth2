@@ -651,12 +651,27 @@ iterator listLoadableKeys*(validatorsDir, secretsDir: string,
               continue
             res.get()
 
+        let kres = ValidatorPubKey.fromHex(keyName)
+        let cres = publicKey.load()
+        if $(kres.get()) != $publicKey or $(cres.get()) != $cookedKey:
+          echo "ERROR ERROR ERROR"
+          echo "keyName: ", $keyName
+          echo "kres: ", $kres
+          echo "cres: ", $cres
+          doAssert false
+
         yield cookedKey
 
+    echo "ALL OK"
+
   except OSError as err:
+    echo "OS ERROR ", $(err.msg)
     error "Validator keystores directory not accessible",
           path = validatorsDir, err = err.msg
     quit 1
+  finally:
+    echo "DONE WITH listLoadableKeys"
+    echo "======================================="
 
 iterator listLoadableKeystores*(validatorsDir, secretsDir: string,
                                 nonInteractive: bool,
