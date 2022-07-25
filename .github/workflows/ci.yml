@@ -203,6 +203,7 @@ jobs:
           else
             ${make_cmd} -j ${ncpu} V=1 NIM_COMMIT=${{ matrix.branch }} DISABLE_TEST_FIXTURES_SCRIPT=1 test
           fi
+          zip -r nimcache.zip nimcache
 
       # The upload creates a combined report that gets posted as a comment on the PR
       # https://github.com/EnricoMi/publish-unit-test-result-action
@@ -211,6 +212,12 @@ jobs:
         with:
           name: Unit Test Results ${{ matrix.target.os }}-${{ matrix.target.cpu }}
           path: build/*.xml
+
+      - name: Upload nimcache
+        uses: actions/upload-artifact@v3
+        with:
+          name: nimcache
+          path: nimcache.zip
 
   # https://github.com/EnricoMi/publish-unit-test-result-action
   event_file:
