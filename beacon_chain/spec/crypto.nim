@@ -118,9 +118,9 @@ func toPubKey*(pubKey: CookedPubKey): ValidatorPubKey =
 func load*(v: ValidatorPubKey): Option[CookedPubKey] =
   ## Parse signature blob - this may fail
   var val: blscurve.PublicKey
-  debugEcho "loading: ", $v
-  debugEcho "blob: ", $v.blob
-  debugEcho " val: ", $val
+  # debugEcho "loading: ", $v
+  # debugEcho "blob: ", $v.blob
+  # debugEcho " val: ", $val
   if fromBytes(val, v.blob):
     some CookedPubKey(val)
   else:
