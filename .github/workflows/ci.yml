@@ -70,7 +70,10 @@ jobs:
           base_branch=$(jq -r '.pull_request.base.ref' "$GITHUB_EVENT_PATH")
           echo 2
           git fetch origin "$base_branch" 2>/dev/null
-          echo 3
+          echo 3 "$base_branch"
+          echo <<<EOF
+          git diff --name-only --diff-filter=d --ignore-submodules "origin/$base_branch" HEAD | grep -vE '\.('$excluded_extensions')$'
+EOF
           modified_files=$(git diff --name-only --diff-filter=d --ignore-submodules "origin/$base_branch" HEAD | grep -vE '\.('$excluded_extensions')$')
 
           echo 4
