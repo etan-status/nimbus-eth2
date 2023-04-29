@@ -66,10 +66,14 @@ jobs:
         run: |
           excluded_extensions="md|png"
 
+          echo 1
           base_branch=$(jq -r '.pull_request.base.ref' "$GITHUB_EVENT_PATH")
+          echo 2
           git fetch origin "$base_branch" 2>/dev/null
+          echo 3
           modified_files=$(git diff --name-only --diff-filter=d --ignore-submodules "origin/$base_branch" HEAD | grep -vE '\.('$excluded_extensions')$')
 
+          echo 4
           current_year=$(date +"%Y")
           outdated_files=()
           for file in $modified_files; do
@@ -78,6 +82,7 @@ jobs:
             fi
           done
 
+          echo 5
           if (( ${#outdated_files[@]} )); then
             echo "The following files do not have an up-to-date copyright year:"
             for file in "${outdated_files[@]}"; do
@@ -85,6 +90,7 @@ jobs:
             done
             exit 1
           fi
+          echo 6
 
       - name: MSYS2 (Windows amd64)
         if: runner.os == 'Windows' && matrix.target.cpu == 'amd64'
