@@ -72,8 +72,7 @@ jobs:
           git fetch origin "$base_branch" 2>/dev/null
           echo 3 "$base_branch"
           git diff --name-only --diff-filter=d --ignore-submodules "origin/$base_branch" HEAD
-          echo 3.5
-          modified_files=$(git diff --name-only --diff-filter=d --ignore-submodules "origin/$base_branch" HEAD | grep -vE '\.('$excluded_extensions')$')
+          modified_files=$(git diff --name-only --diff-filter=d --ignore-submodules "origin/$base_branch" HEAD | grep -vE '\.('$excluded_extensions')$' || true)
 
           echo 4
           current_year=$(date +"%Y")
