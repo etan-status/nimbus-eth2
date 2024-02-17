@@ -258,7 +258,7 @@ jobs:
       - name: Check exception tracking
         if: ${{ !cancelled() }} && github.event_name == 'pull_request'
         run: |
-          problematic_files=()=()
+          problematic_files=()
           while read -r file; do
             if ! grep -qE '^{\.push raises: \[\]\.}' "$file"; then
               problematic_files+=("$file")
