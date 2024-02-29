@@ -16,6 +16,6 @@ jobs:
     name: "Close pull request"
     runs-on: ubuntu-latest
     steps:
-      - name: Close
+      - name: CloseX
         run: |
           gh pr close --comment "Pull requests to the `stable` branch are not allowed.\nPlease open your pull request against the `unstable` branch.\nSee https://nimbus.guide/contribute.html#build-and-deploy" --delete-branch "1"
