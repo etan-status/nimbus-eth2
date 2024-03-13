@@ -76,7 +76,7 @@ programMain:
         raiseAssert "Invalid baked-in state: " & err.msg
 
     genesisTime = getStateField(genesisState[], genesis_time)
-    beaconClock = BeaconClock.init(genesisTime).valueOr:
+    beaconClock = BeaconClock.init(SECONDS_PER_SLOT, genesisTime).valueOr:
       error "Invalid genesis time in state", genesisTime
       quit 1
     getBeaconTime = beaconClock.getBeaconTimeFn()
@@ -256,9 +256,10 @@ programMain:
 
   proc onSlot(wallTime: BeaconTime, lastSlot: Slot) =
     let
+      slotTimes = wallTime.slotTimes
       wallSlot = wallTime.slotOrZero()
       expectedSlot = lastSlot + 1
-      delay = wallTime - expectedSlot.start_beacon_time()
+      delay = wallTime - expectedSlot.start_beacon_time(slotTimes)
 
       finalizedHeader = lightClient.finalizedHeader
       optimisticHeader = lightClient.optimisticHeader
@@ -293,9 +294,11 @@ programMain:
 
   proc runOnSlotLoop() {.async.} =
     var
-      curSlot = getBeaconTime().slotOrZero()
+      curTime = getBeaconTime()
+      slotTimes = curTime.slotTimes
+      curSlot = curTime.slotOrZero()
       nextSlot = curSlot + 1
-      timeToNextSlot = nextSlot.start_beacon_time() - getBeaconTime()
+      timeToNextSlot = nextSlot.start_beacon_time(slotTimes) - getBeaconTime()
     while true:
       await sleepAsync(timeToNextSlot)
 
@@ -307,7 +310,7 @@ programMain:
 
       curSlot = wallSlot
       nextSlot = wallSlot + 1
-      timeToNextSlot = nextSlot.start_beacon_time() - getBeaconTime()
+      timeToNextSlot = nextSlot.start_beacon_time(slotTimes) - getBeaconTime()
 
   proc onSecond(time: Moment) =
     let wallSlot = getBeaconTime().slotOrZero()

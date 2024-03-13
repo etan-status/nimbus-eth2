@@ -249,15 +249,17 @@ proc updateHead*(self: var ConsensusManager, newHead: BlockRef) =
 
   self.checkExpectedBlock()
 
-proc updateHead*(self: var ConsensusManager, wallSlot: Slot) =
+proc updateHead*(self: var ConsensusManager, wallTime: BeaconTime) =
   ## Trigger fork choice and update the DAG with the new head block
   ## This does not automatically prune the DAG after finalization
   ## `pruneFinalized` must be called for pruning.
 
   # Grab the new head according to our latest attestation data
   let
+    slotTimes = wallTime.slotTimes
+    wallSlot = wallTime.slotOrZero
     newHead = self.attestationPool[].selectOptimisticHead(
-        wallSlot.start_beacon_time).valueOr:
+        wallSlot.start_beacon_time(slotTimes)).valueOr:
       warn "Head selection failed, using previous head",
         head = shortLog(self.dag.head), wallSlot
       return

@@ -117,6 +117,7 @@ func nextLcSyncTaskDelay*(
     didLatestSyncTaskProgress: bool
 ): Duration =
   let
+    slotTimes = wallTime.slotTimes
     current = wallTime.slotOrZero().sync_committee_period
     remainingDuration =
       if not current.isGossipSupported(finalized, isNextSyncCommitteeKnown):
@@ -130,7 +131,7 @@ func nextLcSyncTaskDelay*(
         let
           wallPeriod = wallTime.slotOrZero().sync_committee_period
           deadlineSlot = (wallPeriod + 1).start_slot - 1
-          deadline = deadlineSlot.start_beacon_time()
+          deadline = deadlineSlot.start_beacon_time(slotTimes)
         chronos.nanoseconds((deadline - wallTime).nanoseconds)
       else:
         # Next sync committee period

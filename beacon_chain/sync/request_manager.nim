@@ -249,8 +249,9 @@ proc requestManagerBlockLoop(rman: RequestManager) {.async: (raises: [CancelledE
 proc getMissingBlobs(rman: RequestManager): seq[BlobIdentifier] =
   let
     wallTime = rman.getBeaconTime()
+    slotTimes = wallTime.slotTimes
     wallSlot = wallTime.slotOrZero()
-    delay = wallTime - wallSlot.start_beacon_time()
+    delay = wallTime - wallSlot.start_beacon_time(slotTimes)
     waitDur = TimeDiff(nanoseconds: BLOB_GOSSIP_WAIT_TIME_NS)
 
   var fetches: seq[BlobIdentifier]

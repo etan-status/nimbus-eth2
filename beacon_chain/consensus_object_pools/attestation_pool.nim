@@ -85,10 +85,13 @@ logScope: topics = "attpool"
 declareGauge attestation_pool_block_attestation_packing_time,
   "Time it took to create list of attestations for block"
 
-proc init*(T: type AttestationPool, dag: ChainDAGRef,
-           quarantine: ref Quarantine,
-           forkChoiceVersion = ForkChoiceVersion.Stable,
-           onAttestation: OnAttestationCallback = nil): T =
+proc init*(
+    T: type AttestationPool,
+    dag: ChainDAGRef,
+    quarantine: ref Quarantine,
+    slotTimes: SlotTimes,
+    forkChoiceVersion = ForkChoiceVersion.Stable,
+    onAttestation: OnAttestationCallback = nil): T =
   ## Initialize an AttestationPool from the dag `headState`
   ## The `finalized_root` works around the finalized_checkpoint of the genesis block
   ## holding a zero_root.
@@ -151,7 +154,7 @@ proc init*(T: type AttestationPool, dag: ChainDAGRef,
           withBlck(blck):
             forkChoice.process_block(
               dag, epochRef, blckRef, unrealized, forkyBlck.message,
-              blckRef.slot.start_beacon_time)
+              blckRef.slot.start_beacon_time(slotTimes))
 
     doAssert status.isOk(), "Error in preloading the fork choice: " & $status.error
 

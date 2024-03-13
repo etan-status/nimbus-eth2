@@ -31,11 +31,15 @@ type
     ##
     # TODO consider NTP and network-adjusted timestamps as outlined here:
     #      https://ethresear.ch/t/network-adjusted-timestamps/4187
+    slotTimes*: SlotTimes
     genesis: Time
 
   GetBeaconTimeFn* = proc(): BeaconTime {.gcsafe, raises: [].}
 
-proc init*(T: type BeaconClock, genesis_time: uint64): Opt[T] =
+proc init*(
+    T: type BeaconClock,
+    SECONDS_PER_SLOT: uint64,
+    genesis_time: uint64): Opt[T] =
   # Since we'll be converting beacon time differences to nanoseconds,
   # the time can't be outrageously far from now
   if genesis_time > (getTime().toUnix().uint64 + 100'u64 * 365'u64 * 24'u64 *
@@ -45,14 +49,18 @@ proc init*(T: type BeaconClock, genesis_time: uint64): Opt[T] =
   else:
     let
       unixGenesis = fromUnix(genesis_time.int64)
-      # GENESIS_SLOT offsets slot time, but to simplify calculations, we apply that
-      # offset to genesis instead of applying it at every time conversion
+      # GENESIS_SLOT offsets slot time, but to simplify calculations, we apply
+      # that offset to genesis instead of applying it at every time conversion
       unixGenesisOffset = times.seconds(int(GENESIS_SLOT * SECONDS_PER_SLOT))
 
-    Opt.some T(genesis: unixGenesis - unixGenesisOffset)
+    Opt.some T(
+      slotTimes: ? SlotTimes.init(SECONDS_PER_SLOT),
+      genesis: unixGenesis - unixGenesisOffset)
 
 func toBeaconTime*(c: BeaconClock, t: Time): BeaconTime =
-  BeaconTime(ns_since_genesis: inNanoseconds(t - c.genesis))
+  BeaconTime(
+    slotTimes: c.slotTimes,
+    ns_since_genesis: inNanoseconds(t - c.genesis))
 
 func toSlot*(c: BeaconClock, t: Time): tuple[afterGenesis: bool, slot: Slot] =
   c.toBeaconTime(t).toSlot()
@@ -64,15 +72,17 @@ proc now*(c: BeaconClock): BeaconTime =
 func getBeaconTimeFn*(c: BeaconClock): GetBeaconTimeFn =
   return proc(): BeaconTime = c.now()
 
-proc fromNow*(c: BeaconClock, t: BeaconTime): tuple[inFuture: bool, offset: Duration] =
+proc fromNow*(
+    c: BeaconClock, t: BeaconTime): tuple[inFuture: bool, offset: Duration] =
   let now = c.now()
   if t > now:
     (true, nanoseconds((t - now).nanoseconds))
   else:
     (false, nanoseconds((now - t).nanoseconds))
 
-proc fromNow*(c: BeaconClock, slot: Slot): tuple[inFuture: bool, offset: Duration] =
-  c.fromNow(slot.start_beacon_time())
+proc fromNow*(
+    c: BeaconClock, slot: Slot): tuple[inFuture: bool, offset: Duration] =
+  c.fromNow(slot.start_beacon_time(c.slotTimes))
 
 proc durationToNextSlot*(c: BeaconClock): Duration =
   let
@@ -82,13 +92,14 @@ proc durationToNextSlot*(c: BeaconClock): Duration =
   if currentSlot.afterGenesis:
     let nextSlot = currentSlot.slot + 1
     nanoseconds(
-      (nextSlot.start_beacon_time() - currentTime).nanoseconds)
+      (nextSlot.start_beacon_time(c.slotTimes) - currentTime).nanoseconds)
   else:
     # absoluteTime = BeaconTime(-currentTime.ns_since_genesis).
     let
-      absoluteTime = Slot(0).start_beacon_time() +
-        (Slot(0).start_beacon_time() - currentTime)
-      timeToNextSlot = absoluteTime - currentSlot.slot.start_beacon_time()
+      absoluteTime = Slot(0).start_beacon_time(c.slotTimes) +
+        (Slot(0).start_beacon_time(c.slotTimes) - currentTime)
+      timeToNextSlot = absoluteTime -
+        currentSlot.slot.start_beacon_time(c.slotTimes)
     nanoseconds(timeToNextSlot.nanoseconds)
 
 proc durationToNextEpoch*(c: BeaconClock): Duration =
@@ -99,14 +110,14 @@ proc durationToNextEpoch*(c: BeaconClock): Duration =
   if currentSlot.afterGenesis:
     let nextEpochSlot = (currentSlot.slot.epoch() + 1).start_slot()
     nanoseconds(
-      (nextEpochSlot.start_beacon_time() - currentTime).nanoseconds)
+      (nextEpochSlot.start_beacon_time(c.slotTimes) - currentTime).nanoseconds)
   else:
     # absoluteTime = BeaconTime(-currentTime.ns_since_genesis).
     let
-      absoluteTime = Slot(0).start_beacon_time() +
-        (Slot(0).start_beacon_time() - currentTime)
+      absoluteTime = Slot(0).start_beacon_time(c.slotTimes) +
+        (Slot(0).start_beacon_time(c.slotTimes) - currentTime)
       timeToNextEpoch = absoluteTime -
-        currentSlot.slot.epoch().start_slot().start_beacon_time()
+        currentSlot.slot.epoch().start_slot().start_beacon_time(c.slotTimes)
     nanoseconds(timeToNextEpoch.nanoseconds)
 
 func saturate*(d: tuple[inFuture: bool, offset: Duration]): Duration =

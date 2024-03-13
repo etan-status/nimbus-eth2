@@ -828,7 +828,9 @@ proc getDurationToNextAttestation*(vc: ValidatorClientRef,
   if minSlot == FAR_FUTURE_SLOT:
     "<unknown>"
   else:
-    $(minSlot.attestation_deadline() - slot.start_beacon_time())
+    let slotTimes = vc.beaconClock.slotTimes
+    $(minSlot.attestation_deadline(slotTimes) -
+      slot.start_beacon_time(slotTimes))
 
 proc getDurationToNextBlock*(vc: ValidatorClientRef, slot: Slot): string =
   var minSlot = FAR_FUTURE_SLOT
@@ -845,7 +847,9 @@ proc getDurationToNextBlock*(vc: ValidatorClientRef, slot: Slot): string =
   if minSlot == FAR_FUTURE_SLOT:
     "<unknown>"
   else:
-    $(minSlot.block_deadline() - slot.start_beacon_time())
+    let slotTimes = vc.beaconClock.slotTimes
+    $(minSlot.block_deadline(slotTimes) -
+      slot.start_beacon_time(slotTimes))
 
 iterator attesterDutiesForEpoch*(vc: ValidatorClientRef,
                                  epoch: Epoch): DutyAndProof =
@@ -1160,12 +1164,14 @@ proc checkedWaitForSlot*(vc: ValidatorClientRef, destinationSlot: Slot,
                          showLogs: bool): Future[Opt[Slot]] {.async.} =
   let
     currentTime = vc.beaconClock.now()
+    slotTimes = currentTime.slotTimes
     currentSlot = currentTime.slotOrZero()
     chronosOffset = chronos.nanoseconds(
       if offset.nanoseconds < 0: 0'i64 else: offset.nanoseconds)
 
-  var timeToSlot = (destinationSlot.start_beacon_time() - currentTime) +
-                   chronosOffset
+  var timeToSlot =
+    (destinationSlot.start_beacon_time(slotTimes) - currentTime) +
+    chronosOffset
 
   logScope:
     start_time = shortLog(currentTime)
@@ -1198,7 +1204,7 @@ proc checkedWaitForSlot*(vc: ValidatorClientRef, destinationSlot: Slot,
       else:
         # Time moved back by a single slot - this could be a minor adjustment,
         # for example when NTP does its thing after not working for a while
-        timeToSlot = destinationSlot.start_beacon_time() - wallTime +
+        timeToSlot = destinationSlot.start_beacon_time(slotTimes) - wallTime +
                      chronosOffset
         if showLogs:
           warn "System time adjusted backwards, rescheduling slot actions"
@@ -1261,7 +1267,8 @@ proc registerBlock*(vc: ValidatorClientRef, eblck: EventBeaconBlockObject,
                     node: BeaconNodeServerRef) =
   let
     wallTime = vc.beaconClock.now()
-    delay = wallTime - eblck.slot.start_beacon_time()
+    slotTimes = wallTime.slottimes
+    delay = wallTime - eblck.slot.start_beacon_time(slotTimes)
 
   debug "Block received", slot = eblck.slot,
         block_root = shortLog(eblck.block_root), optimistic = eblck.optimistic,
@@ -1304,7 +1311,9 @@ proc waitForBlock*(
   ## by the beacon node.
   let
     startTime = Moment.now()
-    waitTime = (start_beacon_time(slot) + timediff) - vc.beaconClock.now()
+    slotTimes = vc.beaconClock.slotTimes
+    waitTime =
+      (slot.start_beacon_time(slotTimes) + timediff) - vc.beaconClock.now()
 
   logScope:
     slot = slot

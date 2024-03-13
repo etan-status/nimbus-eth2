@@ -227,7 +227,9 @@ proc on_attestation*(
        attesting_indices: openArray[ValidatorIndex],
        wallTime: BeaconTime
      ): FcResult[void] =
-  ? self.update_time(dag, max(wallTime, attestation_slot.start_beacon_time))
+  let slotTimes = wallTime.slotTimes
+  ? self.update_time(dag,
+    max(wallTime, attestation_slot.start_beacon_time(slotTimes)))
 
   if attestation_slot < self.checkpoints.time.slotOrZero:
     for validator_index in attesting_indices:
@@ -275,7 +277,9 @@ proc process_block*(self: var ForkChoice,
                     unrealized: FinalityCheckpoints,
                     blck: ForkyTrustedBeaconBlock,
                     wallTime: BeaconTime): FcResult[void] =
-  ? update_time(self, dag, max(wallTime, blckRef.slot.start_beacon_time))
+  let slotTimes = wallTime.slotTimes
+  ? self.update_time(
+    dag, max(wallTime, blckRef.slot.start_beacon_time(slotTimes)))
 
   for attester_slashing in blck.body.attester_slashings:
     for idx in getValidatorIndices(attester_slashing):
@@ -297,7 +301,7 @@ proc process_block*(self: var ForkChoice,
   # Add proposer score boost if the block is timely
   let slot = self.checkpoints.time.slotOrZero
   if slot == blck.slot and
-      self.checkpoints.time < slot.attestation_deadline and
+      self.checkpoints.time < slot.attestation_deadline(slotTimes) and
       self.checkpoints.proposer_boost_root == ZERO_HASH:
     self.checkpoints.proposer_boost_root = blckRef.root
 

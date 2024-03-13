@@ -663,8 +663,9 @@ proc registerAttestation*(
     attestation: Attestation,
     idx: ValidatorIndex) =
   let
+    slotTimes = seen_timestamp.slotTimes
     slot = attestation.data.slot
-    delay = seen_timestamp - slot.attestation_deadline()
+    delay = seen_timestamp - slot.attestation_deadline(slotTimes)
 
   self.withMonitor(idx):
     let id = monitor.id
@@ -688,8 +689,9 @@ proc registerAggregate*(
     aggregate_and_proof: AggregateAndProof,
     attesting_indices: openArray[ValidatorIndex]) =
   let
+    slotTimes = seen_timestamp.slotTimes
     slot = aggregate_and_proof.aggregate.data.slot
-    delay = seen_timestamp - slot.aggregate_deadline()
+    delay = seen_timestamp - slot.aggregate_deadline(slotTimes)
     aggregator_index = aggregate_and_proof.aggregator_index
 
   self.withMonitor(aggregator_index):
@@ -761,8 +763,9 @@ proc registerBeaconBlock*(
   self.withMonitor(blck.proposer_index):
     let
       id = monitor.id
+      slotTimes = seen_timestamp.slotTimes
       slot = blck.slot
-      delay = seen_timestamp - slot.block_deadline()
+      delay = seen_timestamp - slot.block_deadline(slotTimes)
 
     validator_monitor_beacon_block.inc(1, [$src, metricId])
     validator_monitor_beacon_block_delay_seconds.observe(
@@ -780,8 +783,9 @@ proc registerSyncCommitteeMessage*(
   self.withMonitor(sync_committee_message.validator_index):
     let
       id = monitor.id
+      slotTimes = seen_timestamp.slotTimes
       slot = sync_committee_message.slot
-      delay = seen_timestamp - slot.sync_committee_message_deadline()
+      delay = seen_timestamp - slot.sync_committee_message_deadline(slotTimes)
 
     validator_monitor_sync_committee_messages.inc(1, [$src, metricId])
     validator_monitor_sync_committee_messages_delay_seconds.observe(
@@ -803,8 +807,9 @@ proc registerSyncContribution*(
     contribution_and_proof: ContributionAndProof,
     participants: openArray[ValidatorIndex]) =
   let
+    slotTimes = seen_timestamp.slotTimes
     slot = contribution_and_proof.contribution.slot
-    delay = seen_timestamp - slot.sync_contribution_deadline()
+    delay = seen_timestamp - slot.sync_contribution_deadline(slotTimes)
 
   let aggregator_index = contribution_and_proof.aggregator_index
   self.withMonitor(aggregator_index):

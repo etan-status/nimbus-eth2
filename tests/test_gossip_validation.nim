@@ -38,6 +38,7 @@ proc pruneAtFinalization(dag: ChainDAGRef, attPool: AttestationPool) =
 suite "Gossip validation " & preset():
   setup:
     # Genesis state that results in 3 members per committee
+    const slotTimes = SlotTimes.init(SECONDS_PER_SLOT).expect("valid")
     let rng = HmacDrbgContext.new()
     var
       validatorMonitor = newClone(ValidatorMonitor.init())
@@ -47,7 +48,7 @@ suite "Gossip validation " & preset():
       taskpool = Taskpool.new()
       verifier = BatchVerifier.init(rng, taskpool)
       quarantine = newClone(Quarantine.init())
-      pool = newClone(AttestationPool.init(dag, quarantine))
+      pool = newClone(AttestationPool.init(dag, quarantine, slotTimes))
       state = newClone(dag.headState)
       cache = StateCache()
       info = ForkedEpochInfo()

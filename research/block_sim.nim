@@ -152,7 +152,9 @@ cli do(slots = SLOTS_PER_EPOCH * 7,
   let
     (genesisState, depositTreeSnapshot) = loadGenesis(validators, false)
     genesisTime = float getStateField(genesisState[], genesis_time)
-  const cfg = getSimulationConfig()
+  const
+    cfg = getSimulationConfig()
+    slotTimes = SlotTimes.init(SECONDS_PER_SLOT).expect("valid")
 
   echo "Starting simulation..."
 
@@ -175,7 +177,7 @@ cli do(slots = SLOTS_PER_EPOCH * 7,
         raiseAssert "Failed to initialize Taskpool: " & exc.msg
     verifier = BatchVerifier.init(rng, taskpool)
     quarantine = newClone(Quarantine.init())
-    attPool = AttestationPool.init(dag, quarantine)
+    attPool = AttestationPool.init(dag, quarantine, slotTimes)
     batchCrypto = BatchCrypto.new(
       rng, eager = func(): bool = true,
       genesis_validators_root = dag.genesis_validators_root,
@@ -221,7 +223,8 @@ cli do(slots = SLOTS_PER_EPOCH * 7,
                 sig.toValidatorSig()).expect("valid data")
 
             attPool.addAttestation(
-              attestation, [validator_index], sig, data.slot.start_beacon_time)
+              attestation, [validator_index], sig,
+              data.slot.start_beacon_time(slotTimes))
     do:
       raiseAssert "withUpdatedState failed"
 

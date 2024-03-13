@@ -183,7 +183,7 @@ proc doTrustedNodeSync*(
         doAssert genesisState != nil, "Already checked for `TrustedBlockRoot`"
         let
           genesisTime = getStateField(genesisState[], genesis_time)
-          beaconClock = BeaconClock.init(genesisTime).valueOr:
+          beaconClock = BeaconClock.init(SECONDS_PER_SLOT, genesisTime).valueOr:
             error "Invalid genesis time in state", genesisTime
             quit 1
           getBeaconTime = beaconClock.getBeaconTimeFn()

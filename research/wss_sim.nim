@@ -55,10 +55,13 @@ cli do(validatorsDir: string, secretsDir: string,
       except CatchableError:
         raiseAssert "failed to read hashed beacon state"
 
-  var
-    clock = BeaconClock.init(getStateField(state[], genesis_time)).valueOr:
+  let
+    clock = BeaconClock.init(
+        SECONDS_PER_SLOT, getStateField(state[], genesis_time)).valueOr:
       error "Invalid genesis time in state"
       quit 1
+    slotTimes = clock.slotTimes
+  var
     validators: Table[ValidatorIndex, ValidatorPrivKey]
     validatorKeys: Table[ValidatorPubKey, ValidatorPrivKey]
 
@@ -100,7 +103,7 @@ cli do(validatorsDir: string, secretsDir: string,
       slot = getStateField(state[], slot) + 1
     process_slots(cfg, state[], slot, cache, info, {}).expect("works")
 
-    if start_beacon_time(slot) > clock.now():
+    if slot.start_beacon_time(slotTimes) > clock.now():
       notice "Ran out of time",
         epoch = slot.epoch
       break
@@ -122,13 +125,15 @@ cli do(validatorsDir: string, secretsDir: string,
         balance = block:
           var b: uint64
           for k, _ in validators:
-            if is_active_validator(getStateField(state[], validators).asSeq[k], slot.epoch):
+            if is_active_validator(
+                getStateField(state[], validators).asSeq[k], slot.epoch):
               b += getStateField(state[], balances).asSeq[k]
           b
         validators = block:
           var b: int
           for k, _ in validators:
-            if is_active_validator(getStateField(state[], validators).asSeq[k], slot.epoch):
+            if is_active_validator(
+                getStateField(state[], validators).asSeq[k], slot.epoch):
               b += 1
           b
         avgBalance = balance.int64 div validators.int64

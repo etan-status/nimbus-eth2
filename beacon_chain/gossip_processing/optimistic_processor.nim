@@ -69,6 +69,7 @@ proc processSignedBeaconBlock*(
     signedBlock: ForkySignedBeaconBlock): ValidationRes =
   let
     wallTime = self.getBeaconTime()
+    slotTimes = wallTime.slotTimes
     (afterGenesis, wallSlot) = wallTime.toSlot()
 
   logScope:
@@ -82,7 +83,7 @@ proc processSignedBeaconBlock*(
     return errIgnore("Block before genesis")
 
   # Potential under/overflows are fine; would just create odd metrics and logs
-  let delay = wallTime - signedBlock.message.slot.start_beacon_time
+  let delay = wallTime - signedBlock.message.slot.start_beacon_time(slotTimes)
 
   # Start of block processing - in reality, we have already gone through SSZ
   # decoding at this stage, which may be significant
@@ -128,7 +129,7 @@ proc processSignedBeaconBlock*(
   # negative peer score may be offset through those different topics.
   # The practical impact depends on the actually deployed scoring heuristics.
   trace "Optimistic block cached"
-  return errIgnore("Validation delegated to sync committee")
+  errIgnore("Validation delegated to sync committee")
 
 proc setOptimisticHeader*(
     self: OptimisticProcessor, optimisticHeader: BeaconBlockHeader) =

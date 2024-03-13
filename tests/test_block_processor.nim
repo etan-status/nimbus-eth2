@@ -35,6 +35,7 @@ proc pruneAtFinalization(dag: ChainDAGRef) =
 
 suite "Block processor" & preset():
   setup:
+    const slotTimes = SlotTimes.init(SECONDS_PER_SLOT).expect("valid")
     let rng = HmacDrbgContext.new()
     var
       db = makeTestDB(SLOTS_PER_EPOCH)
@@ -43,7 +44,8 @@ suite "Block processor" & preset():
       taskpool = Taskpool.new()
       quarantine = newClone(Quarantine.init())
       blobQuarantine = newClone(BlobQuarantine())
-      attestationPool = newClone(AttestationPool.init(dag, quarantine))
+      attestationPool = newClone(AttestationPool.init(
+        dag, quarantine, slotTimes))
       elManager = new ELManager # TODO: initialise this properly
       actionTracker: ActionTracker
       consensusManager = ConsensusManager.new(

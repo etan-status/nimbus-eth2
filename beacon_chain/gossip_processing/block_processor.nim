@@ -425,6 +425,7 @@ proc storeBlock(
     startTick = Moment.now()
     vm = self.validatorMonitor
     dag = self.consensusManager.dag
+    slotTimes = wallTime.slotTimes
     wallSlot = wallTime.slotOrZero
 
   # If the block is missing its parent, it will be re-orphaned below
@@ -613,7 +614,7 @@ proc storeBlock(
   # Grab the new head according to our latest attestation data; determines how
   # async this needs to be.
   let newHead = attestationPool[].selectOptimisticHead(
-    wallSlot.start_beacon_time)
+    wallSlot.start_beacon_time(slotTimes))
 
   if newHead.isOk:
     template elManager(): auto = self.consensusManager.elManager

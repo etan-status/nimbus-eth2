@@ -36,6 +36,7 @@ suite "Light client processor" & preset():
       res.DENEB_FORK_EPOCH = (EPOCHS_PER_SYNC_COMMITTEE_PERIOD * 2).Epoch
       res.ELECTRA_FORK_EPOCH = FAR_FUTURE_EPOCH
       res
+    slotTimes = SlotTimes.init(SECONDS_PER_SLOT)
 
   const numValidators = SLOTS_PER_EPOCH
   let
@@ -87,7 +88,7 @@ suite "Light client processor" & preset():
     setup:
       var time = chronos.seconds(0)
       proc getBeaconTime(): BeaconTime =
-        BeaconTime(ns_since_genesis: time.nanoseconds)
+        BeaconTime(slotTimes: slotTimes, ns_since_genesis: time.nanoseconds)
       func setTimeToSlot(slot: Slot) =
         time = chronos.seconds((slot * SECONDS_PER_SLOT).int64)
 

@@ -752,7 +752,9 @@ proc pruneSlashingDatabase(service: DutiesServiceRef) {.async.} =
         pruning_time = (finishTime - checkpointTime)
 
 proc slashingDatabasePruningLoop(service: DutiesServiceRef) {.async.} =
-  let vc = service.client
+  let
+    vc = service.client
+    slotTimes = vc.beaconClock.slotTimes
   debug "Slashing database pruning loop is waiting for initialization"
   await allFutures(
     vc.preGenesisEvent.wait(),
@@ -762,7 +764,7 @@ proc slashingDatabasePruningLoop(service: DutiesServiceRef) {.async.} =
   doAssert(len(vc.forks) > 0, "Fork schedule must not be empty at this point")
   while true:
     let slot = await vc.checkedWaitForSlot(vc.getNextEpochMiddleSlot(),
-                                           aggregateSlotOffset, false)
+                                           slotTimes.aggregateSlotOffset, false)
     if slot.isNone():
       continue
 

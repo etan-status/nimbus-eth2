@@ -371,7 +371,8 @@ proc initFullNode(
     quarantine = newClone(
       Quarantine.init())
     attestationPool = newClone(AttestationPool.init(
-      dag, quarantine, config.forkChoiceVersion.get, onAttestationReceived))
+      dag, quarantine, node.beaconClock.slotTimes,
+      config.forkChoiceVersion.get, onAttestationReceived))
     syncCommitteeMsgPool = newClone(
       SyncCommitteeMsgPool.init(rng, dag.cfg, onSyncContribution))
     lightClientPool = newClone(
@@ -738,7 +739,7 @@ proc init*(T: type BeaconNode,
       config, cfg, db, eventBus,
       validatorMonitor, networkGenesisValidatorsRoot)
     genesisTime = getStateField(dag.headState, genesis_time)
-    beaconClock = BeaconClock.init(genesisTime).valueOr:
+    beaconClock = BeaconClock.init(SECONDS_PER_SLOT, genesisTime).valueOr:
       fatal "Invalid genesis time in state", genesisTime
       quit 1
 
@@ -1384,9 +1385,13 @@ proc onSlotEnd(node: BeaconNode, slot: Slot) {.async.} =
 
   # By waiting until close before slot end, ensure that preparation for next
   # slot does not interfere with propagation of messages and with VC duties.
-  const endOffset = aggregateSlotOffset + nanos(
-    (NANOSECONDS_PER_SLOT - aggregateSlotOffset.nanoseconds.uint64).int64 div 2)
-  let endCutoff = node.beaconClock.fromNow(slot.start_beacon_time + endOffset)
+  let
+    slotTimes = node.beaconClock.slotTimes
+    endOffset = slotTimes.aggregateSlotOffset + nanos(int64(
+      slotTimes.NANOSECONDS_PER_SLOT -
+      slotTimes.aggregateSlotOffset.nanoseconds.uint64) div 2)
+  let endCutoff = node.beaconClock.fromNow(
+    slot.start_beacon_time(slotTimes) + endOffset)
   if endCutoff.inFuture:
     debug "Waiting for slot end", slot, endCutoff = shortLog(endCutoff.offset)
     await sleepAsync(endCutoff.offset)
@@ -1496,7 +1501,8 @@ proc onSlotEnd(node: BeaconNode, slot: Slot) {.async.} =
       # int64 conversion is safe
       doAssert slotsToNextSyncCommitteePeriod <= SLOTS_PER_SYNC_COMMITTEE_PERIOD
       "in " & toTimeLeftString(
-        SECONDS_PER_SLOT.int64.seconds * slotsToNextSyncCommitteePeriod.int64)
+        slotTimes.SECONDS_PER_SLOT.int64.seconds *
+        slotsToNextSyncCommitteePeriod.int64)
     else:
       "none"
 
@@ -1531,9 +1537,8 @@ proc onSlotEnd(node: BeaconNode, slot: Slot) {.async.} =
   # When we're not behind schedule, we'll speculatively update the clearance
   # state in anticipation of receiving the next block - we do it after logging
   # slot end since the nextActionWaitTime can be short
-  let
-    advanceCutoff = node.beaconClock.fromNow(
-      slot.start_beacon_time() + chronos.seconds(int(SECONDS_PER_SLOT - 1)))
+  let advanceCutoff = node.beaconClock.fromNow(
+    (slot + 1).start_beacon_time(slotTimes) - chronos.seconds(1))
   if advanceCutoff.inFuture:
     # We wait until there's only a second left before the next slot begins, then
     # we advance the clearance state to the next slot - this gives us a high
@@ -1601,12 +1606,13 @@ proc onSlotStart(node: BeaconNode, wallTime: BeaconTime,
   ## lastSlot: the last slot that we successfully processed, so we know where to
   ##           start work from - there might be jumps if processing is delayed
   let
+    slotTimes = wallTime.slotTimes
     # The slot we should be at, according to the clock
     wallSlot = wallTime.slotOrZero
     # If everything was working perfectly, the slot that we should be processing
     expectedSlot = lastSlot + 1
     finalizedEpoch = node.dag.finalizedHead.blck.slot.epoch()
-    delay = wallTime - expectedSlot.start_beacon_time()
+    delay = wallTime - expectedSlot.start_beacon_time(slotTimes)
 
   node.processingDelay = Opt.some(nanoseconds(delay.nanoseconds))
 
@@ -1644,7 +1650,7 @@ proc onSlotStart(node: BeaconNode, wallTime: BeaconTime,
   if node.config.strictVerification:
     verifyFinalization(node, wallSlot)
 
-  node.consensusManager[].updateHead(wallSlot)
+  node.consensusManager[].updateHead(wallTime)
 
   await node.handleValidatorDuties(lastSlot, wallSlot)
 
@@ -1657,7 +1663,7 @@ proc onSlotStart(node: BeaconNode, wallTime: BeaconTime,
       wallSlot.epoch mod EPOCHS_PER_VALIDATOR_REGISTRATION_SUBMISSION == 0:
     asyncSpawn node.registerValidators(wallSlot.epoch)
 
-  return false
+  false
 
 proc onSecond(node: BeaconNode, time: Moment) =
   # Nim GC metrics (for the main thread)
@@ -1926,7 +1932,9 @@ proc start*(node: BeaconNode) {.raises: [CatchableError].} =
   let
     head = node.dag.head
     finalizedHead = node.dag.finalizedHead
-    genesisTime = node.beaconClock.fromNow(start_beacon_time(Slot 0))
+    slotTimes = node.beaconClock.slotTimes
+    genesisTime = node.beaconClock.fromNow(
+      GENESIS_SLOT.start_beacon_time(slotTimes))
 
   notice "Starting beacon node",
     version = fullVersionStr,
@@ -1934,7 +1942,8 @@ proc start*(node: BeaconNode) {.raises: [CatchableError].} =
     enr = node.network.announcedENR.toURI,
     peerId = $node.network.switch.peerInfo.peerId,
     timeSinceFinalization =
-      node.beaconClock.now() - finalizedHead.slot.start_beacon_time(),
+      node.beaconClock.now() -
+      finalizedHead.slot.start_beacon_time(slotTimes),
     head = shortLog(head),
     justified = shortLog(getStateField(
       node.dag.headState, current_justified_checkpoint)),
@@ -1942,7 +1951,7 @@ proc start*(node: BeaconNode) {.raises: [CatchableError].} =
       node.dag.headState, finalized_checkpoint)),
     finalizedHead = shortLog(finalizedHead),
     SLOTS_PER_EPOCH,
-    SECONDS_PER_SLOT,
+    SECONDS_PER_SLOT = slotTimes.SECONDS_PER_SLOT,
     SPEC_VERSION,
     dataDir = node.config.dataDir.string,
     validators = node.attachedValidators[].count

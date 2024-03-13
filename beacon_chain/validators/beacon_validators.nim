@@ -245,14 +245,15 @@ proc isSynced*(node: BeaconNode, head: BlockRef): bool =
   not wallSlot.afterGenesis or
     head.slot + node.config.syncHorizon >= wallSlot.slot
 
-proc handleLightClientUpdates*(node: BeaconNode, slot: Slot)
-    {.async: (raises: [CancelledError]).} =
+proc handleLightClientUpdates*(
+    node: BeaconNode, slot: Slot) {.async: (raises: [CancelledError]).} =
   template pool: untyped = node.lightClientPool[]
 
-  static: doAssert lightClientFinalityUpdateSlotOffset ==
-    lightClientOptimisticUpdateSlotOffset
+  let slotTimes = node.beaconClock.slotTimes
+  doAssert slotTimes.lightClientFinalityUpdateSlotOffset ==
+    slotTimes.lightClientOptimisticUpdateSlotOffset
   let sendTime = node.beaconClock.fromNow(
-    slot.light_client_finality_update_time())
+    slot.light_client_finality_update_time(slotTimes))
   if sendTime.inFuture:
     debug "Waiting to send LC updates", slot, delay = shortLog(sendTime.offset)
     await sleepAsync(sendTime.offset)
@@ -1867,7 +1868,9 @@ proc handleFallbackAttestations(node: BeaconNode, lastSlot, slot: Slot) =
 
   sendAttestations(node, attestationHead.blck, slot)
 
-proc handleValidatorDuties*(node: BeaconNode, lastSlot, slot: Slot) {.async: (raises: [CancelledError]).} =
+proc handleValidatorDuties*(
+    node: BeaconNode,
+    lastSlot, slot: Slot) {.async: (raises: [CancelledError]).} =
   ## Perform validator duties - create blocks, vote and aggregate existing votes
   if node.attachedValidators[].count == 0:
     # Nothing to do because we have no validator attached
@@ -1903,13 +1906,14 @@ proc handleValidatorDuties*(node: BeaconNode, lastSlot, slot: Slot) {.async: (ra
   withState(node.dag.headState):
     node.updateValidators(forkyState.data.validators.asSeq())
 
-  let newHead = await handleProposal(node, head, slot)
+  let
+    slotTimes = node.beaconClock.slotTimes
+    newHead = await handleProposal(node, head, slot)
   head = newHead
 
-  let
-    # The latest point in time when we'll be sending out attestations
-    attestationCutoff = node.beaconClock.fromNow(slot.attestation_deadline())
-
+  # The latest point in time when we'll be sending out attestations
+  let attestationCutoff = node.beaconClock.fromNow(
+    slot.attestation_deadline(slotTimes))
   if attestationCutoff.inFuture:
     debug "Waiting to send attestations",
       head = shortLog(head),
@@ -1921,24 +1925,26 @@ proc handleValidatorDuties*(node: BeaconNode, lastSlot, slot: Slot) {.async: (ra
       await waitAfterBlockCutoff(node.beaconClock, slot, Opt.some(head))
 
     # Time passed - we might need to select a new head in that case
-    node.consensusManager[].updateHead(slot)
+    node.consensusManager[].updateHead(slot.start_beacon_time(slotTimes))
     head = node.dag.head
 
-  static: doAssert attestationSlotOffset == syncCommitteeMessageSlotOffset
+  doAssert slotTimes.attestationSlotOffset ==
+    slotTimes.syncCommitteeMessageSlotOffset
 
   sendAttestations(node, head, slot)
   sendSyncCommitteeMessages(node, head, slot)
 
-  updateValidatorMetrics(node) # the important stuff is done, update the vanity numbers
+  # the important stuff is done, update the vanity numbers
+  updateValidatorMetrics(node)
 
   # https://github.com/ethereum/consensus-specs/blob/v1.4.0-beta.7/specs/phase0/validator.md#broadcast-aggregate
   # https://github.com/ethereum/consensus-specs/blob/v1.4.0-beta.7/specs/altair/validator.md#broadcast-sync-committee-contribution
   # Wait 2 / 3 of the slot time to allow messages to propagate, then collect
   # the result in aggregates
-  static:
-    doAssert aggregateSlotOffset == syncContributionSlotOffset, "Timing change?"
-  let
-    aggregateCutoff = node.beaconClock.fromNow(slot.aggregate_deadline())
+  doAssert slotTimes.aggregateSlotOffset ==
+    slotTimes.syncContributionSlotOffset
+  let aggregateCutoff = node.beaconClock.fromNow(
+    slot.aggregate_deadline(slotTimes))
   if aggregateCutoff.inFuture:
     debug "Waiting to send aggregate attestations",
       aggregateCutoff = shortLog(aggregateCutoff.offset)

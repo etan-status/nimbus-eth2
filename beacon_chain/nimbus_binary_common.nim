@@ -281,10 +281,11 @@ proc sleepAsync*(t: TimeDiff): Future[void] =
 
 proc runSlotLoop*[T](node: T, startTime: BeaconTime,
                      slotProc: SlotStartProc[T]) {.async.} =
+  let slotTimes = startTime.slotTimes
   var
     curSlot = startTime.slotOrZero()
     nextSlot = curSlot + 1 # No earlier than GENESIS_SLOT + 1
-    timeToNextSlot = nextSlot.start_beacon_time() - startTime
+    timeToNextSlot = nextSlot.start_beacon_time(slotTimes) - startTime
 
   info "Scheduling first slot action",
     startTime = shortLog(startTime),
@@ -323,7 +324,7 @@ proc runSlotLoop*[T](node: T, startTime: BeaconTime,
         wallSlot = shortLog(wallSlot)
 
       # cur & next slot remain the same
-      timeToNextSlot = nextSlot.start_beacon_time() - wallTime
+      timeToNextSlot = nextSlot.start_beacon_time(slotTimes) - wallTime
       continue
 
     if wallSlot > nextSlot + SLOTS_PER_EPOCH:
@@ -340,7 +341,7 @@ proc runSlotLoop*[T](node: T, startTime: BeaconTime,
 
     elif wallSlot > nextSlot:
         notice "Missed expected slot start, catching up",
-          delay = shortLog(wallTime - nextSlot.start_beacon_time()),
+          delay = shortLog(wallTime - nextSlot.start_beacon_time(slotTimes)),
           curSlot = shortLog(curSlot),
           nextSlot = shortLog(curSlot)
 
@@ -350,7 +351,8 @@ proc runSlotLoop*[T](node: T, startTime: BeaconTime,
 
     curSlot = wallSlot
     nextSlot = wallSlot + 1
-    timeToNextSlot = nextSlot.start_beacon_time() - node.beaconClock.now()
+    timeToNextSlot =
+      nextSlot.start_beacon_time(slotTimes) - node.beaconClock.now()
 
 proc init*(T: type RestServerRef,
            ip: IpAddress,

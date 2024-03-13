@@ -122,7 +122,8 @@ proc routeSignedBeaconBlock*(
 
   let
     sendTime = router[].getCurrentBeaconTime()
-    delay = sendTime - blck.message.slot.block_deadline()
+    slotTimes = sendTime.slotTimes
+    delay = sendTime - blck.message.slot.block_deadline(slotTimes)
     # The block (and blobs, if present) passed basic gossip validation
     # - we can "safely" broadcast it now. In fact, per the spec, we
     # should broadcast it even if it later fails to apply to our
@@ -207,7 +208,8 @@ proc routeAttestation*(
 
   let
     sendTime = router[].processor.getCurrentBeaconTime()
-    delay = sendTime - attestation.data.slot.attestation_deadline()
+    slotTimes = sendTime.slotTimes
+    delay = sendTime - attestation.data.slot.attestation_deadline(slotTimes)
     res = await router[].network.broadcastAttestation(subnet_id, attestation)
 
   if res.isOk():
@@ -272,7 +274,9 @@ proc routeSignedAggregateAndProof*(
 
   let
     sendTime = router[].processor.getCurrentBeaconTime()
-    delay = sendTime - proof.message.aggregate.data.slot.aggregate_deadline()
+    slotTimes = sendTime.slotTimes
+    slot = proof.message.aggregate.data.slot
+    delay = sendTime - slot.aggregate_deadline(slotTimes)
     res = await router[].network.broadcastAggregateAndProof(proof)
 
   if res.isOk():
@@ -307,7 +311,8 @@ proc routeSyncCommitteeMessage*(
 
   let
     sendTime = router[].processor.getCurrentBeaconTime()
-    delay = sendTime - msg.slot.sync_committee_message_deadline()
+    slotTimes = sendTime.slotTimes
+    delay = sendTime - msg.slot.sync_committee_message_deadline(slotTimes)
 
     res = await router[].network.broadcastSyncCommitteeMessage(
       msg, subcommitteeIdx)
@@ -428,7 +433,9 @@ proc routeSignedContributionAndProof*(
 
   let
     sendTime = router[].processor.getCurrentBeaconTime()
-    delay = sendTime - msg.message.contribution.slot.sync_contribution_deadline()
+    slotTimes = sendTime.slotTimes
+    slot = msg.message.contribution.slot
+    delay = sendTime - slot.sync_contribution_deadline(slotTimes)
 
   let res = await router[].network.broadcastSignedContributionAndProof(msg)
   if res.isOk():

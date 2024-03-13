@@ -14,12 +14,12 @@ import
 
 suite "Beacon time":
   test "basics":
-    let
-      s0 = Slot(0)
+    const slotTimes = SlotTimes.init(SECONDS_PER_SLOT).expect("valid")
+    let s0 = Slot(0)
 
     check:
       s0.epoch() == Epoch(0)
-      s0.start_beacon_time() == BeaconTime()
+      s0.start_beacon_time() == BeaconTime(slotTimes: slotTimes)
       s0.sync_committee_period() == SyncCommitteePeriod(0)
 
       # Roundtrip far times we treat these as "Infinity"
@@ -30,7 +30,9 @@ suite "Beacon time":
       FAR_FUTURE_PERIOD.start_epoch().sync_committee_period() == FAR_FUTURE_PERIOD
       FAR_FUTURE_PERIOD.start_slot().sync_committee_period() == FAR_FUTURE_PERIOD
 
-      BeaconTime(ns_since_genesis: -10000000000).slotOrZero == Slot(0)
+      BeaconTime(
+        slotTimes: slotTimes,
+        ns_since_genesis: -10000000000).slotOrZero == Slot(0)
       Slot(5).since_epoch_start() == 5
       (Epoch(42).start_slot() + 5).since_epoch_start() == 5
 

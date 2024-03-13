@@ -488,7 +488,8 @@ func toValidationError(
     self: var LightClientProcessor,
     r: Result[bool, VerifierError],
     wallTime: BeaconTime,
-    obj: SomeForkedLightClientObject): Result[void, ValidationError] =
+    obj: ForkedLightClientFinalityUpdate|ForkedLightClientOptimisticUpdate
+): Result[void, ValidationError] =
   if r.isOk:
     let didSignificantProgress = r.get
     if didSignificantProgress:
@@ -498,8 +499,13 @@ func toValidationError(
             forkyObject.signature_slot
           else:
             GENESIS_SLOT
+        slotTimes = wallTime.slotTimes
         currentTime = wallTime + MAXIMUM_GOSSIP_CLOCK_DISPARITY
-        forwardTime = signature_slot.light_client_finality_update_time
+        forwardTime =
+          when obj is ForkedLightClientFinalityUpdate:
+            signature_slot.light_client_finality_update_time(slotTimes)
+          else:
+            signature_slot.light_client_optimistic_update_time(slotTimes)
       if currentTime < forwardTime:
         # [IGNORE] The `finality_update` is received after the block
         # at `signature_slot` was given enough time to propagate through

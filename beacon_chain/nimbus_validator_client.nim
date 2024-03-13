@@ -129,7 +129,8 @@ proc initClock(vc: ValidatorClientRef): Future[BeaconClock] {.async.} =
   # This procedure performs initialization of BeaconClock using current genesis
   # information. It also performs waiting for genesis.
   let
-    res = BeaconClock.init(vc.beaconGenesis.genesis_time).valueOr:
+    res = BeaconClock.init(
+        SECONDS_PER_SLOT, vc.beaconGenesis.genesis_time).valueOr:
       raise (ref ValidatorClientError)(
         msg: "Invalid genesis time: " & $vc.beaconGenesis.genesis_time)
     currentTime = res.now()
@@ -146,7 +147,7 @@ proc initClock(vc: ValidatorClientRef): Future[BeaconClock] {.async.} =
     info "Initializing beacon clock",
          genesis_time = vc.beaconGenesis.genesis_time,
          current_slot = currentSlot, current_epoch = currentEpoch
-  return res
+  res
 
 proc initMetrics(vc: ValidatorClientRef): Future[bool] {.async.} =
   if vc.config.metricsEnabled:

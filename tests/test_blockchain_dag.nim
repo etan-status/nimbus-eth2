@@ -734,6 +734,7 @@ suite "Diverging hardforks":
     phase0RuntimeConfig.ALTAIR_FORK_EPOCH = FAR_FUTURE_EPOCH
     altairRuntimeConfig.ALTAIR_FORK_EPOCH = 2.Epoch
 
+    const slotTimes = SlotTimes.init(SECONDS_PER_SLOT).expect("valid")
     var
       db = makeTestDB(SLOTS_PER_EPOCH)
       validatorMonitor = newClone(ValidatorMonitor.init())
@@ -765,7 +766,7 @@ suite "Diverging hardforks":
 
     let dagAltair = init(
       ChainDAGRef, altairRuntimeConfig, db, validatorMonitorAltair, {})
-    discard AttestationPool.init(dagAltair, quarantine)
+    discard AttestationPool.init(dagAltair, quarantine, slotTimes)
 
   test "Non-tail block in common":
     check:
@@ -797,7 +798,7 @@ suite "Diverging hardforks":
 
     let dagAltair = init(
       ChainDAGRef, altairRuntimeConfig, db, validatorMonitor, {})
-    discard AttestationPool.init(dagAltair, quarantine)
+    discard AttestationPool.init(dagAltair, quarantine, slotTimes)
 
 suite "Backfill":
   setup:

@@ -9,6 +9,7 @@
 
 import
   std/[hashes, typetraits],
+  results,
   chronicles,
   chronos/timer,
   json_serialization,
@@ -26,17 +27,21 @@ export hashes, timer, json_serialization, presets
 # * SyncCommitteePeriod - EPOCHS_PER_SYNC_COMMITTEE_PERIOD epochs since genesis
 
 type
+  TimeDiff* = object
+    nanoseconds*: int64
+    ## Difference between two points in time with nanosecond granularity
+    ## Can be negative (unlike timer.Duration)
+
+  SlotTimes* = object
+    SECONDS_PER_SLOT*: uint64
+
   BeaconTime* = object
     ## A point in time, relative to the genesis of the chain
     ##
     ## Implemented as nanoseconds since genesis - negative means before
     ## the chain started.
+    slotTimes*: SlotTimes
     ns_since_genesis*: int64
-
-  TimeDiff* = object
-    nanoseconds*: int64
-    ## Difference between two points in time with nanosecond granularity
-    ## Can be negative (unlike timer.Duration)
 
 const
   # Earlier spec versions had these at a different slot
@@ -46,9 +51,7 @@ const
   # https://github.com/ethereum/consensus-specs/blob/v1.4.0-beta.7/specs/phase0/fork-choice.md#constant
   INTERVALS_PER_SLOT* = 3
 
-  FAR_FUTURE_BEACON_TIME* = BeaconTime(ns_since_genesis: int64.high())
-
-  NANOSECONDS_PER_SLOT* = SECONDS_PER_SLOT * 1_000_000_000'u64
+  FAR_FUTURE_NS_SINCE_GENESIS = int64.high
 
 template ethTimeUnit*(typ: type) {.dirty.} =
   func `+`*(x: typ, y: uint64): typ {.borrow.}
@@ -104,25 +107,86 @@ ethTimeUnit Slot
 ethTimeUnit Epoch
 ethTimeUnit SyncCommitteePeriod
 
-template `<`*(a, b: BeaconTime): bool = a.ns_since_genesis < b.ns_since_genesis
-template `<=`*(a, b: BeaconTime): bool = a.ns_since_genesis <= b.ns_since_genesis
-template `<`*(a, b: TimeDiff): bool = a.nanoseconds < b.nanoseconds
-template `<=`*(a, b: TimeDiff): bool = a.nanoseconds <= b.nanoseconds
-template `<`*(a: TimeDiff, b: Duration): bool = a.nanoseconds < b.nanoseconds
+template `<`*(a, b: BeaconTime): bool =
+  a.ns_since_genesis < b.ns_since_genesis
+template `<=`*(a, b: BeaconTime): bool =
+  a.ns_since_genesis <= b.ns_since_genesis
+template `<`*(a, b: TimeDiff): bool =
+  a.nanoseconds < b.nanoseconds
+template `<=`*(a, b: TimeDiff): bool =
+  a.nanoseconds <= b.nanoseconds
+template `<`*(a: TimeDiff, b: Duration): bool =
+  a.nanoseconds < b.nanoseconds
+
+func init*(
+    t: typedesc[SlotTimes], SECONDS_PER_SLOT: uint64): Opt[SlotTimes] =
+  if SECONDS_PER_SLOT == 0 or
+      SECONDS_PER_SLOT > int64.high.uint64 div 1_000_000_000'u64:
+    return Opt.none SlotTimes
+  Opt.some SlotTimes(
+    SECONDS_PER_SLOT: SECONDS_PER_SLOT)
+
+func NANOSECONDS_PER_SLOT*(slotTimes: SlotTimes): uint64 =
+  slotTimes.SECONDS_PER_SLOT * 1_000_000_000'u64
+
+# Offsets from the slot start to when the corresponding message should be sent
+
+# https://github.com/ethereum/consensus-specs/blob/v1.4.0-beta.7/specs/phase0/validator.md#attesting
+func attestationSlotOffset*(slotTimes: SlotTimes): TimeDiff =
+  TimeDiff(nanoseconds:
+    slotTimes.NANOSECONDS_PER_SLOT.int64 div INTERVALS_PER_SLOT)
+
+# https://github.com/ethereum/consensus-specs/blob/v1.4.0-beta.7/specs/phase0/validator.md#broadcast-aggregate
+func aggregateSlotOffset*(slotTimes: SlotTimes): TimeDiff =
+  TimeDiff(nanoseconds:
+    slotTimes.NANOSECONDS_PER_SLOT.int64 * 2 div INTERVALS_PER_SLOT)
+
+# https://github.com/ethereum/consensus-specs/blob/v1.4.0-beta.7/specs/altair/validator.md#prepare-sync-committee-message
+func syncCommitteeMessageSlotOffset*(slotTimes: SlotTimes): TimeDiff =
+  TimeDiff(nanoseconds:
+    slotTimes.NANOSECONDS_PER_SLOT.int64 div INTERVALS_PER_SLOT)
+
+# https://github.com/ethereum/consensus-specs/blob/v1.4.0-beta.7/specs/altair/validator.md#broadcast-sync-committee-contribution
+func syncContributionSlotOffset*(slotTimes: SlotTimes): TimeDiff =
+  TimeDiff(nanoseconds:
+    slotTimes.NANOSECONDS_PER_SLOT.int64 * 2 div INTERVALS_PER_SLOT)
+
+# https://github.com/ethereum/consensus-specs/blob/v1.4.0-beta.7/specs/altair/light-client/p2p-interface.md#sync-committee
+func lightClientFinalityUpdateSlotOffset*(slotTimes: SlotTimes): TimeDiff =
+  TimeDiff(nanoseconds:
+    slotTimes.NANOSECONDS_PER_SLOT.int64 div INTERVALS_PER_SLOT)
+
+# https://github.com/ethereum/consensus-specs/blob/v1.4.0-beta.7/specs/altair/light-client/p2p-interface.md#sync-committee
+func lightClientOptimisticUpdateSlotOffset*(slotTimes: SlotTimes): TimeDiff =
+  TimeDiff(nanoseconds:
+    slotTimes.NANOSECONDS_PER_SLOT.int64 div INTERVALS_PER_SLOT)
 
 func toSlot*(t: BeaconTime): tuple[afterGenesis: bool, slot: Slot] =
-  if t == FAR_FUTURE_BEACON_TIME:
-    (true, FAR_FUTURE_SLOT)
+  if t.ns_since_genesis == FAR_FUTURE_NS_SINCE_GENESIS:
+    (
+      true,
+      FAR_FUTURE_SLOT
+    )
   elif t.ns_since_genesis >= 0:
-    (true, Slot(uint64(t.ns_since_genesis) div NANOSECONDS_PER_SLOT))
+    (
+      true,
+      Slot(uint64(t.ns_since_genesis) div t.slotTimes.NANOSECONDS_PER_SLOT)
+    )
   else:
-    (false, Slot(uint64(-t.ns_since_genesis) div NANOSECONDS_PER_SLOT))
+    (
+      false,
+      Slot(uint64(-t.ns_since_genesis) div t.slotTimes.NANOSECONDS_PER_SLOT)
+    )
 
 template `+`*(t: BeaconTime, offset: Duration | TimeDiff): BeaconTime =
-  BeaconTime(ns_since_genesis: t.ns_since_genesis + offset.nanoseconds)
+  BeaconTime(
+    slotTimes: t.slotTimes,
+    ns_since_genesis: t.ns_since_genesis + offset.nanoseconds)
 
 template `-`*(t: BeaconTime, offset: Duration | TimeDiff): BeaconTime =
-  BeaconTime(ns_since_genesis: t.ns_since_genesis - offset.nanoseconds)
+  BeaconTime(
+    slotTimes: t.slotTimes,
+    ns_since_genesis: t.ns_since_genesis - offset.nanoseconds)
 
 template `-`*(a, b: BeaconTime): TimeDiff =
   TimeDiff(nanoseconds: a.ns_since_genesis - b.ns_since_genesis)
@@ -130,55 +194,58 @@ template `-`*(a, b: BeaconTime): TimeDiff =
 template `+`*(a: TimeDiff, b: Duration): TimeDiff =
   TimeDiff(nanoseconds: a.nanoseconds + b.nanoseconds)
 
-const
-  # Offsets from the start of the slot to when the corresponding message should
-  # be sent
-  # https://github.com/ethereum/consensus-specs/blob/v1.4.0-beta.7/specs/phase0/validator.md#attesting
-  attestationSlotOffset* = TimeDiff(nanoseconds:
-    NANOSECONDS_PER_SLOT.int64 div INTERVALS_PER_SLOT)
-  # https://github.com/ethereum/consensus-specs/blob/v1.4.0-beta.7/specs/phase0/validator.md#broadcast-aggregate
-  aggregateSlotOffset* = TimeDiff(nanoseconds:
-    NANOSECONDS_PER_SLOT.int64  * 2 div INTERVALS_PER_SLOT)
-  # https://github.com/ethereum/consensus-specs/blob/v1.4.0-beta.7/specs/altair/validator.md#prepare-sync-committee-message
-  syncCommitteeMessageSlotOffset* = TimeDiff(nanoseconds:
-    NANOSECONDS_PER_SLOT.int64  div INTERVALS_PER_SLOT)
-  # https://github.com/ethereum/consensus-specs/blob/v1.4.0-beta.7/specs/altair/validator.md#broadcast-sync-committee-contribution
-  syncContributionSlotOffset* = TimeDiff(nanoseconds:
-    NANOSECONDS_PER_SLOT.int64  * 2 div INTERVALS_PER_SLOT)
-  # https://github.com/ethereum/consensus-specs/blob/v1.4.0-beta.7/specs/altair/light-client/p2p-interface.md#sync-committee
-  lightClientFinalityUpdateSlotOffset* = TimeDiff(nanoseconds:
-    NANOSECONDS_PER_SLOT.int64 div INTERVALS_PER_SLOT)
-  # https://github.com/ethereum/consensus-specs/blob/v1.4.0-beta.7/specs/altair/light-client/p2p-interface.md#sync-committee
-  lightClientOptimisticUpdateSlotOffset* = TimeDiff(nanoseconds:
-    NANOSECONDS_PER_SLOT.int64 div INTERVALS_PER_SLOT)
-
 func toFloatSeconds*(t: TimeDiff): float =
   float(t.nanoseconds) / 1_000_000_000.0
 
-func start_beacon_time*(s: Slot): BeaconTime =
+func start_beacon_time*(
+    s: Slot, slotTimes: SlotTimes): BeaconTime =
   # The point in time that a slot begins
-  const maxSlot = Slot(
-    uint64(FAR_FUTURE_BEACON_TIME.ns_since_genesis) div NANOSECONDS_PER_SLOT)
-  if s > maxSlot: FAR_FUTURE_BEACON_TIME
-  else: BeaconTime(ns_since_genesis: int64(uint64(s) * NANOSECONDS_PER_SLOT))
+  let maxSlot = Slot(
+    uint64(FAR_FUTURE_NS_SINCE_GENESIS) div slotTimes.NANOSECONDS_PER_SLOT)
+  BeaconTime(
+    slotTimes: slotTimes,
+    ns_since_genesis:
+      if s > maxSlot:
+        FAR_FUTURE_NS_SINCE_GENESIS
+      else:
+        int64(uint64(s) * slotTimes.NANOSECONDS_PER_SLOT))
 
-func block_deadline*(s: Slot): BeaconTime =
-  s.start_beacon_time
-func attestation_deadline*(s: Slot): BeaconTime =
-  s.start_beacon_time + attestationSlotOffset
-func aggregate_deadline*(s: Slot): BeaconTime =
-  s.start_beacon_time + aggregateSlotOffset
-func sync_committee_message_deadline*(s: Slot): BeaconTime =
-  s.start_beacon_time + syncCommitteeMessageSlotOffset
-func sync_contribution_deadline*(s: Slot): BeaconTime =
-  s.start_beacon_time + syncContributionSlotOffset
-func light_client_finality_update_time*(s: Slot): BeaconTime =
-  s.start_beacon_time + lightClientFinalityUpdateSlotOffset
-func light_client_optimistic_update_time*(s: Slot): BeaconTime =
-  s.start_beacon_time + lightClientOptimisticUpdateSlotOffset
+func block_deadline*(
+    s: Slot, slotTimes: SlotTimes): BeaconTime =
+  s.start_beacon_time(slotTimes)
+
+func attestation_deadline*(
+    s: Slot, slotTimes: SlotTimes): BeaconTime =
+  s.start_beacon_time(slotTimes) +
+  slotTimes.attestationSlotOffset
+
+func aggregate_deadline*(
+    s: Slot, slotTimes: SlotTimes): BeaconTime =
+  s.start_beacon_time(slotTimes) +
+  slotTimes.aggregateSlotOffset
+
+func sync_committee_message_deadline*(
+    s: Slot, slotTimes: SlotTimes): BeaconTime =
+  s.start_beacon_time(slotTimes) +
+  slotTimes.syncCommitteeMessageSlotOffset
+
+func sync_contribution_deadline*(
+    s: Slot, slotTimes: SlotTimes): BeaconTime =
+  s.start_beacon_time(slotTimes) +
+  slotTimes.syncContributionSlotOffset
+
+func light_client_finality_update_time*(
+    s: Slot, slotTimes: SlotTimes): BeaconTime =
+  s.start_beacon_time(slotTimes) +
+  slotTimes.lightClientFinalityUpdateSlotOffset
+
+func light_client_optimistic_update_time*(
+    s: Slot, slotTimes: SlotTimes): BeaconTime =
+  s.start_beacon_time(slotTimes) +
+  slotTimes.lightClientOptimisticUpdateSlotOffset
 
 func slotOrZero*(time: BeaconTime): Slot =
-  let exSlot = time.toSlot
+  let exSlot = time.toSlot()
   if exSlot.afterGenesis: exSlot.slot
   else: Slot(0)
 

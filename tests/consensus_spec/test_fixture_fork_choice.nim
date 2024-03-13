@@ -305,6 +305,7 @@ proc doRunTest(
       initialLoad(
         path, db, consensusFork.BeaconState, consensusFork.BeaconBlock)
 
+    slotTimes = SlotTimes.init(SECONDS_PER_SLOT)
     rng = HmacDrbgContext.new()
     taskpool =
       try:
@@ -325,7 +326,8 @@ proc doRunTest(
   for step in steps:
     case step.kind
     of opOnTick:
-      time = BeaconTime(ns_since_genesis: step.tick.seconds.nanoseconds)
+      time = BeaconTime(
+        slotTimes: slotTimes, ns_since_genesis: step.tick.seconds.nanoseconds)
       let status = stores.fkChoice[].update_time(stores.dag, time)
       doAssert status.isOk == step.valid
     of opOnAttestation:
