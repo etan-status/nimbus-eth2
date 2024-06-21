@@ -131,6 +131,10 @@ type
     url*: Uri
     provenBlockProperties*: seq[string] # empty if this is not a verifying Web3Signer
 
+  LongRangeSyncMode* {.pure.} = enum
+    Light = "light",
+    Lenient = "lenient"
+
   BeaconNodeConf* = object
     configFile* {.
       desc: "Loads the configuration from a TOML file"
@@ -557,6 +561,11 @@ type
         desc: "Maximum number of sync committee periods to retain light client data"
         name: "light-client-data-max-periods" .}: Option[uint64]
 
+      longRangeSync* {.
+        desc: "Enable long-range syncing (genesis sync)",
+        defaultValue: LongRangeSyncMode.Light,
+        name: "long-range-sync".}: LongRangeSyncMode
+
       inProcessValidators* {.
         desc: "Disable the push model (the beacon node tells a signing process with the private keys of the validators what to sign and when) and load the validators in the beacon node itself"
         defaultValue: true # the use of the nimbus_signing_process binary by default will be delayed until async I/O over stdin/stdout is developed for the child process.
@@ -643,7 +652,8 @@ type
       # Flag name and semantics borrowed from Prysm
       # https://github.com/prysmaticlabs/prysm/pull/12227/files
       localBlockValueBoost* {.
-        desc: "Increase execution layer block values for builder bid comparison by a percentage"
+        desc: "Increase execution layer block values for builder bid " &
+              "comparison by a percentage"
         defaultValue: 10
         name: "local-block-value-boost" .}: uint8
 
@@ -1031,6 +1041,13 @@ type
       defaultValue: false
       name: "distributed".}: bool
 
+    builderBoostFactor* {.
+      desc: "Percentage multiplier to apply to the builder's payload value " &
+            "when choosing between a builder payload header and payload " &
+            "from the paired execution node."
+      defaultValue: 100,
+      name: "builder-boost-factor".}: uint64
+
     beaconNodes* {.
       desc: "URL addresses to one or more beacon node HTTP REST APIs",
       defaultValue: @[defaultBeaconNodeUri]
@@ -1039,7 +1056,7 @@ type
 
     monitoringType* {.
       desc: "Enable block monitoring which are seen by beacon node (BETA)"
-      defaultValue: BlockMonitoringType.Disabled
+      defaultValue: BlockMonitoringType.Event
       name: "block-monitor-type".}: BlockMonitoringType
 
   SigningNodeConf* = object
