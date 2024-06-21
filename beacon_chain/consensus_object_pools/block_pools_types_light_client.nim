@@ -16,7 +16,7 @@ import
 type
   LightClientDataImportMode* {.pure.} = enum
     ## Controls which classes of light client data are imported.
-    None = "none"
+    None = "none"X
       ## Do not import new light client data.
     OnlyNew = "only-new"
       ## Incrementally import new light client data.
