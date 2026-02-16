@@ -17,7 +17,7 @@ import
   ../spec/datatypes/[phase0, altair, bellatrix],
   # Fork choice
   ../consensus_object_pools/[spec_cache, blockchain_dag],
-  "."/[fork_choice_types, proto_array]
+  "."/[fork_choice_types, proto_array, fast_confirmation]
 
 from std/sequtils import keepItIf
 export results, fork_choice_types
@@ -48,12 +48,47 @@ func compute_deltas(
 
 logScope: topics = "fork_choice"
 
+proc update_assigned_slots(
+    self: var ValidatorInfo, dag: ChainDAGRef, current_slot: Slot): Opt[void] =
+  var
+    epoch = current_slot.epoch
+    offset = epoch.lastBit
+    blck = dag.head.atSlot(epoch.attester_dependent_slot).blck
+  if blck == nil:
+    return err()
+  if blck.bid.root != self.spliced_dependent_roots[offset]:
+    let shufflingRef = ? dag.getShufflingRef(blck, epoch, false)
+    self.balances.splice_assigned_slots(shufflingRef)
+    self.spliced_epochs[offset] = epoch
+    self.spliced_dependent_roots[offset] = blck.bid.root
+  if epoch > GENESIS_EPOCH:
+    dec epoch
+    offset = 1 - offset
+    blck = blck.atSlot(epoch.attester_dependent_slot).blck
+    if blck == nil:
+      return err()
+    if blck.bid.root != self.spliced_dependent_roots[offset]:
+      let shufflingRef = ? dag.getShufflingRef(blck, epoch, false)
+      self.balances.splice_assigned_slots(shufflingRef)
+      self.spliced_epochs[offset] = epoch
+      self.spliced_dependent_roots[offset] = blck.bid.root
+  ok()
+
+proc track_recent_assigned_slots(
+    self: var ForkChoiceBackend, dag: ChainDAGRef, current_slot: Slot) =
+  template validators: var ValidatorInfo =
+    self.current_epoch_observed_justified.validators
+  if validators.update_assigned_slots(dag, current_slot).isErr:
+    self.spliced_epochs = [FAR_FUTURE_EPOCH, FAR_FUTURE_EPOCH]
+
 template to_balance_checkpoint(
     epochRef: EpochRef, blck: BlockRef): BalanceCheckpoint =
   BalanceCheckpoint(
     checkpoint: Checkpoint(root: blck.root, epoch: epochRef.epoch),
     total_active_balance: epochRef.total_active_balance,
-    validators: ValidatorInfo(balances: epochRef.fork_choice_balances))
+    validators: ValidatorInfo(
+      balances: epochRef.fork_choice_balances,
+      spliced_epochs: [FAR_FUTURE_EPOCH, FAR_FUTURE_EPOCH]))
 
 func init*(
     T: type ForkChoiceBackend, confirmation_byzantine_threshold: uint64,
@@ -101,6 +136,7 @@ proc update_justified(
     warn "Skipping justified checkpoint update, no EpochRef - report bug",
       blck, epoch, error
     return
+  doAssert epochRef.epoch == epoch
 
   trace "Updating justified",
     store = self.justified.checkpoint,
@@ -135,11 +171,45 @@ proc update_checkpoints(
 
   ok()
 
+func apply_fcr_balance_source(self: var ForkChoiceBackend): FcResult[void] =
+  var deltas = newSeq[Delta](self.proto_array.indices.len)
+  ? deltas.compute_deltas(
+    indices = self.proto_array.indices,
+    indices_offset = self.proto_array.nodes.offset,
+    votes = self.votes,
+    old_balances = self.fcr_balances,
+    newBalances = self.current_epoch_observed_justified.validators.balances)
+  ? self.proto_array.applyFcrScoreChanges(deltas)
+  self.fcr_balances = self.current_epoch_observed_justified.validators.balances
+  ok()
+
 proc update_confirmed(self: var ForkChoiceBackend, confirmed: BlockId) =
   if confirmed.slot < self.confirmed.slot:
     warn "Confirmed block was unconfirmed",
       old_confirmed = shortLog(self.confirmed), new_confirmed = confirmed
   self.confirmed = confirmed
+
+proc reconfirm_fcr(
+    self: var ForkChoice, dag: ChainDAGRef,
+    current_slot: Slot): FcResult[void] =
+  # Revert to finalized block if either of the following is true:
+  # 1) the latest confirmed block's epoch is older than the previous epoch,
+  # 2) [...],
+  # 3) the confirmed chain starting from the current epoch observed
+  #    justified checkpoint cannot be re-confirmed at the start of
+  #    the current epoch.
+  let needsRevert =
+    if self.backend.confirmed.slot.epoch + 1 < current_slot.epoch:
+      true
+    else:
+      self.backend.track_recent_assigned_slots(dag, current_slot)
+      ? self.backend.apply_fcr_balance_source()
+      not self.is_confirmed_chain_safe(current_slot)
+  if needsRevert:
+    self.backend.update_confirmed BlockId(
+      slot: self.checkpoints.finalized.epoch.start_slot,
+      root: self.checkpoints.finalized.root)
+  ok()
 
 # https://github.com/ethereum/consensus-specs/blob/v1.4.0-beta.1/specs/phase0/fork-choice.md#on_tick_per_slot
 proc on_tick(
@@ -168,8 +238,13 @@ proc on_tick(
       for realized in self.backend.proto_array.realizePendingCheckpoints():
         ? self.checkpoints.update_checkpoints(dag, realized, current_slot)
 
+      # Reconfirm with previous epoch balance source
+      ? self.reconfirm_fcr(dag, current_slot)
+
       # Update observed justified checkpoint before any attestations from the
       # last slot of the previous epoch become processable
+      self.backend.current_epoch_observed_justified.validators
+        .transfer_assigned_slots_to(self.checkpoints.justified.validators)
       self.backend.current_epoch_observed_justified = self.checkpoints.justified
   ok()
 
@@ -394,6 +469,59 @@ proc will_select_head*(
     slot: self.checkpoints.justified.checkpoint.epoch.start_slot,
     root: self.checkpoints.justified.checkpoint.root)
   ok()
+
+proc current_total_active_balance(dag: ChainDAGRef, current_slot: Slot): Gwei =
+  let
+    current_epoch = current_slot.epoch
+    epochRef =
+      if dag.headState.slot.epoch == current_epoch:
+        dag.findEpochRef(dag.head.bid, current_epoch, false).valueOr:
+          # Just pull the data from the state, don't trigger Snappy / SSZ jank
+          var cache: StateCache
+          withState(dag.headState):
+            return get_total_active_balance(forkyState.data, cache)
+      else:
+        # We don't update headState on empty slots, so it can be from the past.
+        # Take the lag spike once, and cache it. The proc will only be called if
+        # there is a somewhat recent confirmed block; no unbounded replays.
+        dag.getEpochRef(dag.head.bid, current_epoch, false)
+          .expect("getEpochRef for current head should always succeed")
+  epochRef.total_active_balance
+
+proc set_head*(
+    self: var ForkChoice, dag: ChainDAGRef, wallTime: BeaconTime) =
+  ? self.update_time(dag, wallTime)
+  self.current_slot_head = dag.head.root
+  let
+    current_slot = time.slotOrZero(dag.timeParams)
+    current_epoch = current_slot.epoch
+    current_total_active_balance = dag.current_total_active_balance(current_slot)
+
+
+  proc get_current_target_state(): BalanceCheckpoint =
+    doAssert dag.head.bid == current_slot_head.bid
+
+    if dag.headState.slot.epoch == current_epoch:
+      # Just pull the data from the state, instead of Snappy / SSZ from EpochRef
+      var cache: StateCache
+      withState(dag.headState):
+        BalanceCheckpoint(
+          checkpoint: Checkpoint(root: target.root, epoch: current_epoch),
+          total_active_balance:
+            get_total_active_balance(forkyState.data, cache),
+          validators: ValidatorInfo(balances: get_fork_choice_balances(
+            forkyState.validators.asSeq, current_epoch)))
+    else:
+      # We don't update headState on empty slots, so it can be from the past.
+      # Take the lag spike once, and cache it. The proc will only be called if
+      # there is a somewhat recent confirmed block; no unbounded replays.
+      dag.getEpochRef(
+        current_slot_head.bid, current_epoch, preFinalized = false)
+          .expect("getEpochRef for current head should always succeed")
+            .to_balance_checkpoint(target)
+
+  self.backend.update_confirmed self.backend.get_latest_confirmed(
+    self.checkpoints.finalized, current_slot, get_current_target_state)
 
 # https://github.com/ethereum/consensus-specs/blob/v1.5.0-beta.0/fork_choice/safe-block.md#get_safe_beacon_block_root
 func get_safe_beacon_block_root*(self: ForkChoice): Eth2Digest =

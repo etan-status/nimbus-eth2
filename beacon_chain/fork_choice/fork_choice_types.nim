@@ -105,13 +105,15 @@ type
     parent*: Opt[Index]
     checkpoints*: FinalityCheckpoints
     sharedFinalizedEpoch*: Epoch
-    weight*: int64
+    weight*, fcrSupport*: int64
     invalid*: bool
     bestChild*: Opt[Index]
     bestDescendant*: Opt[Index]
 
   ValidatorInfo* = object
     balances*: seq[ForkChoiceBalance]
+    spliced_epochs*: array[2, Epoch]
+    spliced_dependent_roots*: array[2, Eth2Digest]
 
   BalanceCheckpoint* = object
     checkpoint*: Checkpoint
@@ -140,7 +142,7 @@ type
     current_epoch_observed_justified*: BalanceCheckpoint
     previous_slot_head*, current_slot_head*: Eth2Digest
     votes*: seq[VoteTracker]
-    balances*: seq[ForkChoiceBalance]
+    balances*, fcr_balances*: seq[ForkChoiceBalance]
 
   QueuedAttestation* = object
     attesting_indices*: seq[ValidatorIndex]

@@ -71,6 +71,32 @@ func len*(nodes: ProtoNodes): int =
 func add(nodes: var ProtoNodes, node: ProtoNode) =
   nodes.buf.add node
 
+func `[]`*(self: ProtoArray, root: Eth2Digest): Opt[ProtoNode] =
+  self.nodes[self.indices.getOrDefault(root, -1)]
+
+func `[]`*(self: ProtoArray, root: Eth2Digest, idx: var Index): Opt[ProtoNode] =
+  idx = self.indices.getOrDefault(root, -1)
+  self.nodes[idx]
+
+func parentNode*(self: ProtoArray, node: ProtoNode): Opt[ProtoNode] =
+  self.nodes[node.parent.get(-1)]
+
+func is_ancestor*(
+    self: ProtoArray, node: ProtoNode,
+    ancestor_root: Eth2Digest, min_slot: Slot, slot: var Slot): bool =
+  ## Return ``true`` if ``ancestor_root`` is an ancestor of ``node``.
+  if node.bid.root == ancestor_root:
+    slot = node.bid.slot
+    return true
+
+  var node = node
+  while node.bid.slot >= min_slot:
+    node = self.parentNode(node).valueOr:
+      break
+    if node.bid.root == ancestor_root:
+      slot = node.bid.slot
+      return true
+  false
 
 # Forward declarations
 # ----------------------------------------------------------------------
@@ -102,6 +128,12 @@ func init*(T: type ProtoArray, finalized: Checkpoint, currentSlot: Slot): T =
     nodes: ProtoNodes(buf: @[node], offset: 0),
     indices: {node.bid.root: 0}.toTable())
 
+func unrealized_justified*(self: ProtoArray): Checkpoint =
+  result = self.checkpoints.justified
+  for unrealized in self.currentEpochTips.values:
+    if unrealized.justified.epoch > result.epoch:
+      result = unrealized.justified
+
 iterator realizePendingCheckpoints*(
     self: var ProtoArray): FinalityCheckpoints =
   # Pull-up chain tips from previous epoch
@@ -120,9 +152,20 @@ iterator realizePendingCheckpoints*(
   self.currentEpochTips.clear()
 
 # https://github.com/ethereum/consensus-specs/blob/v1.4.0-beta.3/specs/phase0/fork-choice.md#get_weight
-func calculateProposerBoost(justifiedTotalActiveBalance: Gwei): Gwei =
+func calculateProposerBoost*(justifiedTotalActiveBalance: Gwei): Gwei =
   let committee_weight = justifiedTotalActiveBalance div SLOTS_PER_EPOCH
   (committee_weight * PROPOSER_SCORE_BOOST) div 100
+
+func checkScoreConsistency(
+    self: var ProtoArray,
+    deltas: var openArray[Delta]): FcResult[void] =
+  doAssert self.indices.len == self.nodes.len # By construction
+  if deltas.len != self.indices.len:
+    return err ForkChoiceError(
+      kind: fcInvalidDeltaLen,
+      deltasLen: deltas.len,
+      indicesLen: self.indices.len)
+  ok()
 
 func applyScoreChanges*(
     self: var ProtoArray,
@@ -145,12 +188,7 @@ func applyScoreChanges*(
   #    updating if the current node should become the best-child
   # 4. If required, update the parent's best-descendant with the current node
   #    or its best-descendant
-  doAssert self.indices.len == self.nodes.len # By construction
-  if deltas.len != self.indices.len:
-    return err ForkChoiceError(
-      kind: fcInvalidDeltaLen,
-      deltasLen: deltas.len,
-      indicesLen: self.indices.len)
+  ? self.checkScoreConsistency(deltas)
 
   doAssert currentSlot >= self.currentSlot
   self.currentSlot = currentSlot
@@ -263,6 +301,40 @@ func applyScoreChanges*(
       let nodeLogicalIdx = nodePhysicalIdx + self.nodes.offset
       ? self.maybeUpdateBestChildAndDescendant(parentLogicalIdx, nodeLogicalIdx)
 
+  ok()
+
+func applyFcrScoreChanges*(
+    self: var ProtoArray,
+    deltas: var openArray[Delta]): FcResult[void] =
+  ? self.checkScoreConsistency(deltas)
+
+  template node: untyped {.dirty.} =
+    self.nodes.buf[nodePhysicalIdx]
+
+  for nodePhysicalIdx in countdown(self.nodes.len - 1, 0):
+    if node.bid.root.isZero:
+      continue
+
+    let
+      nodeDelta = deltas[nodePhysicalIdx]
+      fcrSupport = node.fcrSupport + nodeDelta
+    if fcrSupport < 0:
+      return err ForkChoiceError(
+        kind: fcDeltaUnderflow,
+        index: nodePhysicalIdx)
+    node.fcrSupport = fcrSupport
+
+    if node.parent.isSome():
+      let
+        parentLogicalIdx = node.parent.unsafeGet()
+        parentPhysicalIdx = parentLogicalIdx - self.nodes.offset
+      if parentPhysicalIdx < 0:
+        continue
+      if parentPhysicalIdx >= deltas.len:
+        return err ForkChoiceError(
+          kind: fcInvalidParentDelta,
+          index: parentPhysicalIdx)
+      deltas[parentPhysicalIdx] += nodeDelta
   ok()
 
 func onBlock*(
@@ -596,7 +668,7 @@ type ProtoArrayItem* = object
   parent*: Eth2Digest
   checkpoints*: FinalityCheckpoints
   unrealized*: Opt[FinalityCheckpoints]
-  weight*: uint64
+  weight*, fcrSupport*: uint64
   invalid*: bool
   bestChild*: Eth2Digest
   bestDescendant*: Eth2Digest
@@ -629,6 +701,7 @@ iterator items*(self: ProtoArray): ProtoArrayItem =
       checkpoints: node.checkpoints,
       unrealized: unrealized,
       weight: cast[uint64](node.weight),
+      fcrSupport: cast[uint64](node.fcrSupport),
       invalid: node.invalid,
       bestChild: self.nodes.root(node.bestChild),
       bestDescendant: self.nodes.root(node.bestDescendant))
