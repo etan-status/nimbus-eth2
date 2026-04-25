@@ -8,8 +8,8 @@
 {.push raises: [].}
 
 import
-  # Beacon chain internals
-  ../spec/datatypes/altair,
+  stew/bitops2,
+  ../spec/datatypes/[altair, gloas],
   ../beacon_chain_db_light_client,
   ./block_dag
 
@@ -33,10 +33,17 @@ type
   OnLightClientOptimisticUpdateCallback* =
     proc(data: ForkedLightClientOptimisticUpdate) {.gcsafe, raises: [].}
 
+  CachedLightClientHeaderData* = object
+    execution_block_hash*: Eth2Digest
+    execution_branch*:
+      array[log2trunc(gloas.LATEST_BLOCK_HASH_GINDEX_GLOAS), Eth2Digest]
+
   CachedLightClientData* = object
     ## Cached data from historical non-finalized states to improve speed when
     ## creating future `LightClientUpdate` and `LightClientBootstrap` instances.
+    execution_block_hash*: Eth2Digest
     finalized_slot*: Slot
+    finalized*: ref CachedLightClientHeaderData
     current_period_best_update*: ref ForkedLightClientUpdate
     latest_signature_slot*: Slot
     union_roots*: seq[Eth2Digest]

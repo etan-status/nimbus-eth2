@@ -19,10 +19,22 @@ func readExecutionTransaction(
   except RlpError as exc:
     err("Invalid transaction: " & exc.msg)
 
+func all_blob_versioned_hashes*(
+    transactions: seq[bellatrix.Transaction]
+): Result[seq[Hash32], string] =
+  var hashes: seq[Hash32]
+  for txBytes in transactions:
+    if txBytes.len == 0 or txBytes[0] != TxEip4844.byte:
+      continue
+    let tx = ? txBytes.readExecutionTransaction()
+    for vHash in tx.versionedHashes:
+      hashes.add vHash
+  ok hashes
+
 # https://github.com/ethereum/consensus-specs/blob/v1.5.0-alpha.4/specs/deneb/beacon-chain.md#is_valid_versioned_hashes
 func is_valid_versioned_hashes*(
     blck: deneb.BeaconBlock | electra.BeaconBlock | fulu.BeaconBlock |
-          gloas.BeaconBlock,
+          gloas.BeaconBlock | heze.BeaconBlock,
     envelope: NoEnvelope | gloas.ExecutionPayloadEnvelope,
 ): Result[void, string] =
   const consensusFork = typeof(blck).kind
@@ -55,6 +67,6 @@ func is_valid_versioned_hashes*(
 
 func is_valid_versioned_hashes*(
     blck: deneb.BeaconBlock | electra.BeaconBlock | fulu.BeaconBlock |
-          gloas.BeaconBlock,
+          gloas.BeaconBlock | heze.BeaconBlock,
 ): Result[void, string] =
   is_valid_versioned_hashes(blck, noEnvelope)

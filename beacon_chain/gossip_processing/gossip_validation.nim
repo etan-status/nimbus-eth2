@@ -1086,6 +1086,11 @@ proc validateExecutionPayload*(
   if not (blck.slot == envelope.payload.slot_number):
     return dag.checkedReject("ExecutionPayload: slot mismatch")
 
+  # [REJECT] `envelope.parent_beacon_block_root` equals `block.parent_root`.
+  if not (envelope.parent_beacon_block_root == blck.parent_root):
+    return dag.checkedReject(
+      "ExecutionPayload: parent_beacon_block_root mismatch")
+
   template bid: untyped = blck.body.signed_execution_payload_bid.message
 
   # [REJECT] envelope.builder_index == bid.builder_index

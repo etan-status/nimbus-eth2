@@ -150,7 +150,7 @@ suite "EF - Heze - SSZ consensus objects " & preset():
           of "ExecutionPayloadHeader":
             checkSSZ(deneb.ExecutionPayloadHeader, path, hash)
           of "ExecutionPayloadEnvelope":
-            checkSSZ(ExecutionPayloadEnvelope, path, hash)
+            debugHezeComment "skip until v1.7.0-alpha.6 fixtures"
           of "ExecutionPayloadBid":
             checkSSZ(heze.ExecutionPayloadBid, path, hash)
           of "ExecutionRequests":
@@ -203,7 +203,7 @@ suite "EF - Heze - SSZ consensus objects " & preset():
           of "SignedContributionAndProof":
             checkSSZ(SignedContributionAndProof, path, hash)
           of "SignedExecutionPayloadEnvelope":
-            checkSSZ(SignedExecutionPayloadEnvelope, path, hash)
+            debugHezeComment "skip until v1.7.0-alpha.6 fixtures"
           of "SignedExecutionPayloadBid":
             checkSSZ(heze.SignedExecutionPayloadBid, path, hash)
           of "SignedInclusionList":

@@ -1270,6 +1270,8 @@ proc updateBlocksGossipStatus*(
   for gossipEpoch in oldGossipEpochs:
     let forkDigest = node.dag.forkDigests[].atEpoch(gossipEpoch, cfg)
     node.network.unsubscribe(getBeaconBlocksTopic(forkDigest))
+    if cfg.consensusForkAtEpoch(gossipEpoch) >= ConsensusFork.Gloas:
+      node.network.unsubscribe(getExecutionPayloadTopic(forkDigest))
 
   for gossipEpoch in newGossipEpochs:
     let forkDigest = node.dag.forkDigests[].atEpoch(gossipEpoch, cfg)
@@ -1277,6 +1279,9 @@ proc updateBlocksGossipStatus*(
       getBeaconBlocksTopic(forkDigest),
       getBlockTopicParams(node.dag.timeParams),
       enableTopicMetrics = true)
+    if cfg.consensusForkAtEpoch(gossipEpoch) >= ConsensusFork.Gloas:
+      node.network.subscribe(
+        getExecutionPayloadTopic(forkDigest), basicParams())
 
   node.blocksGossipState = targetGossipState
 
@@ -1422,8 +1427,6 @@ proc addGloasMessageHandlers(
   node.network.subscribe(
     getExecutionPayloadBidTopic(forkDigest), basicParams())
   node.network.subscribe(
-    getExecutionPayloadTopic(forkDigest), basicParams())
-  node.network.subscribe(
     getPayloadAttestationMessageTopic(forkDigest), basicParams())
   node.network.subscribe(
     getProposerPreferencesTopic(forkDigest), basicParams())
@@ -1472,7 +1475,6 @@ proc removeFuluMessageHandlers(node: BeaconNode, forkDigest: ForkDigest) =
 proc removeGloasMessageHandlers(node: BeaconNode, forkDigest: ForkDigest) =
   node.removeFuluMessageHandlers(forkDigest)
   node.network.unsubscribe(getExecutionPayloadBidTopic(forkDigest))
-  node.network.unsubscribe(getExecutionPayloadTopic(forkDigest))
   node.network.unsubscribe(getPayloadAttestationMessageTopic(forkDigest))
   node.network.unsubscribe(getProposerPreferencesTopic(forkDigest))
 
@@ -2348,9 +2350,14 @@ proc installMessageValidators(node: BeaconNode) =
               signedEnvelope: SignedExecutionPayloadEnvelope,
               src: PeerId,
             ): ValidationResult =
-              toValidationResult(
-                node.processor[].processExecutionPayloadEnvelope(
-                  MsgSource.gossip, signedEnvelope))
+              if node.shouldSyncViaLightClient(node.currentSlot):
+                toValidationResult(
+                  node.lightEnvelopeProcessor.processExecutionPayloadEnvelope(
+                    signedEnvelope))
+              else:
+                toValidationResult(
+                  node.processor[].processExecutionPayloadEnvelope(
+                    MsgSource.gossip, signedEnvelope))
           )
 
         # payload_attestation_message
@@ -2366,7 +2373,7 @@ proc installMessageValidators(node: BeaconNode) =
                 await node.processor.processPayloadAttestationMessage(
                   payloadAttestationMessage, checkSignature = true,
                   checkValidator = false)))
-        
+
         # proposer_preferences
         # https://github.com/ethereum/consensus-specs/blob/v1.7.0-alpha.4/specs/gloas/p2p-interface.md#proposer_preferences
         when consensusFork >= ConsensusFork.Gloas:

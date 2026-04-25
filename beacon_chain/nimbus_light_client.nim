@@ -12,10 +12,11 @@ import
   chronicles, chronos, stew/io2,
   eth/db/kvstore_sqlite3,
   ./el/el_manager,
-  ./gossip_processing/block_processor_light_client,
+  ./gossip_processing/[
+    block_processor_light_client, envelope_processor_light_client],
   ./networking/[topic_params, network_metadata_downloads],
   ./spec/beaconstate,
-  ./spec/datatypes/[phase0, altair, bellatrix, capella, deneb],
+  ./spec/datatypes/[phase0, altair, bellatrix, capella, deneb, gloas],
   ./[
     beacon_clock, buildinfo, filepath, light_client, light_client_db,
     nimbus_binary_common, process_state, version]
@@ -90,13 +91,24 @@ proc main() {.noinline, raises: [CatchableError].} =
       else:
         nil
 
+    lightEnvelopeHandler = proc(
+        signedEnvelope: gloas.SignedExecutionPayloadEnvelope
+    ): Future[void] {.async: (raises: [CancelledError]).} =
+      if elManager == nil:
+        return
+      if signedEnvelope.message.payload.block_hash.isZero:
+        return
+      discard await elManager.newPayload(
+        signedEnvelope.message,
+        deadline = sleepAsync(NEWPAYLOAD_TIMEOUT), retry = true)
+
     lightBlockHandler = proc(
         signedBlock: ForkedSignedBeaconBlock
     ): Future[void] {.async: (raises: [CancelledError]).} =
       withBlck(signedBlock):
-        debugGloasComment ""
-        when consensusFork >= ConsensusFork.Bellatrix and
-             consensusFork notin [ConsensusFork.Gloas, ConsensusFork.Heze]:
+        when consensusFork >= ConsensusFork.Gloas:
+          discard
+        elif consensusFork >= ConsensusFork.Bellatrix:
           if forkyBlck.message.is_execution_block:
             template payload(): auto = forkyBlck.message.body.execution_payload
             if elManager != nil and not payload.block_hash.isZero:
@@ -104,6 +116,8 @@ proc main() {.noinline, raises: [CatchableError].} =
         else: discard
     lightBlockProcessor = initLightBlockProcessor(
       cfg.timeParams, getBeaconTime, lightBlockHandler)
+    lightEnvelopeProcessor = initLightEnvelopeProcessor(
+      cfg.timeParams, getBeaconTime, lightEnvelopeHandler)
 
     lightClient = createLightClient(
       network, rng, config, cfg, forkDigests, getBeaconTime,
@@ -121,16 +135,23 @@ proc main() {.noinline, raises: [CatchableError].} =
   for consensusFork in ConsensusFork:
     for forkDigest in consensusFork.forkDigests(forkDigests[]):
       withConsensusFork(consensusFork):
+        network.addValidator(
+          getBeaconBlocksTopic(forkDigest), proc (
+              signedBlock: consensusFork.SignedBeaconBlock,
+              src: PeerId
+          ): ValidationResult =
+            toValidationResult(
+              lightBlockProcessor.processSignedBeaconBlock(signedBlock)))
+
         when consensusFork >= ConsensusFork.Gloas:
-          debugGloasComment "consensusFork.SignedBeaconBlock support missing"
-        else:
           network.addValidator(
-            getBeaconBlocksTopic(forkDigest), proc (
-                signedBlock: consensusFork.SignedBeaconBlock,
+            getExecutionPayloadTopic(forkDigest), proc (
+                signedEnvelope: gloas.SignedExecutionPayloadEnvelope,
                 src: PeerId
             ): ValidationResult =
               toValidationResult(
-                lightBlockProcessor.processSignedBeaconBlock(signedBlock)))
+                lightEnvelopeProcessor.processExecutionPayloadEnvelope(
+                  signedEnvelope)))
   lightClient.installMessageValidators()
   waitFor network.startListening()
   waitFor network.start()
@@ -265,6 +286,8 @@ proc main() {.noinline, raises: [CatchableError].} =
     for gossipEpoch in currentGossipState - targetGossipState:
       let forkDigest = forkDigests[].atEpoch(gossipEpoch, cfg)
       network.unsubscribe(getBeaconBlocksTopic(forkDigest))
+      if cfg.consensusForkAtEpoch(gossipEpoch) >= ConsensusFork.Gloas:
+        network.unsubscribe(getExecutionPayloadTopic(forkDigest))
 
     for gossipEpoch in targetGossipState - currentGossipState:
       let forkDigest = forkDigests[].atEpoch(gossipEpoch, cfg)
@@ -272,6 +295,8 @@ proc main() {.noinline, raises: [CatchableError].} =
         getBeaconBlocksTopic(forkDigest),
         getBlockTopicParams(cfg.timeParams),
         enableTopicMetrics = true)
+      if cfg.consensusForkAtEpoch(gossipEpoch) >= ConsensusFork.Gloas:
+        network.subscribe(getExecutionPayloadTopic(forkDigest), basicParams())
 
     blocksGossipState = targetGossipState
 

@@ -19,7 +19,8 @@ import
   # Local modules
   ./[beacon_clock, beacon_chain_db, conf, light_client, version],
   ./gossip_processing/[
-    eth2_processor, block_processor, block_processor_light_client],
+    eth2_processor, block_processor, block_processor_light_client,
+    envelope_processor_light_client],
   ./networking/eth2_network,
   ./el/[el_manager, el_getblobs_service],
   ./consensus_object_pools/[
@@ -41,7 +42,8 @@ export
   beacon_clock, beacon_chain_db, conf, light_client,
   attestation_pool, sync_committee_msg_pool, validator_change_pool,
   eth2_network, el_manager, request_manager, sync_manager, eth2_processor,
-  block_processor_light_client, blockchain_dag, block_quarantine,
+  block_processor_light_client, envelope_processor_light_client,
+  blockchain_dag, block_quarantine,
   base, message_router, validator_monitor, validator_pool,
   consensus_manager, dynamic_fee_recipients, sync_types
 
@@ -81,6 +83,7 @@ type
     config*: BeaconNodeConf
     attachedValidators*: ref ValidatorPool
     lightBlockProcessor*: LightBlockProcessor
+    lightEnvelopeProcessor*: LightEnvelopeProcessor
     lightClientFcuFut*: Future[(PayloadExecutionStatus, Opt[Hash32])]
       .Raising([CancelledError])
     lightClient*: LightClient

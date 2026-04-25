@@ -29,6 +29,7 @@ logScope: topics = "lcdata"
 # - Capella: ~221 KB per `SyncCommitteePeriod` (~6.0 MB per month)
 # - Deneb: ~225 KB per `SyncCommitteePeriod` (~6.2 MB per month)
 # - Electra: ~249 KB per `SyncCommitteePeriod` (~6.2 MB per month)
+# - Gloas: ~95 KB per `SyncCommitteePeriod` (~2.6 MB per month)
 #
 # `lc_xxxxx_current_branches` holds Merkle proofs needed to
 # construct `LightClientBootstrap` objects.
@@ -36,7 +37,7 @@ logScope: topics = "lcdata"
 # needs to be bundled together with other data to fulfill requests.
 # Mainnet data size (all columns):
 # - Altair ... Deneb: ~42 KB per `SyncCommitteePeriod` (~1.1 MB per month)
-# - Electra: ~50 KB per `SyncCommitteePeriod` (~1.4 MB per month)
+# - Electra ... Gloas: ~50 KB per `SyncCommitteePeriod` (~1.4 MB per month)
 #
 # `lc_altair_sync_committees` contains a copy of finalized sync committees.
 # They are initially populated from the main DAG (usually a fast state access).
@@ -44,7 +45,7 @@ logScope: topics = "lcdata"
 # SSZ because this data does not compress well, and because this data
 # needs to be bundled together with other data to fulfill requests.
 # Mainnet data size (all columns):
-# - Altair ... Electra: ~24 KB per `SyncCommitteePeriod` (~0.7 MB per month)
+# - Altair ... Gloas: ~24 KB per `SyncCommitteePeriod` (~0.7 MB per month)
 #
 # `lc_best_updates` holds full `LightClientUpdate` objects in SSZ form.
 # These objects are frequently queried in bulk, but there is only one per
@@ -62,6 +63,7 @@ logScope: topics = "lcdata"
 # - Capella: ~26 KB per `SyncCommitteePeriod` (~0.7 MB per month)
 # - Deneb: ~26 KB per `SyncCommitteePeriod` (~0.7 MB per month)
 # - Electra: ~27 KB per `SyncCommitteePeriod` (~0.7 MB per month)
+# - Gloas: ~25 KB per `SyncCommitteePeriod` (~0.7 MB per month)
 #
 # `lc_sealed_periods` contains the sync committee periods for which
 # full light client data was imported. Data for these periods may no longer
@@ -78,6 +80,7 @@ logScope: topics = "lcdata"
 #   616 = 32+20+32+32+256+32+8+8+8+8+4+32+32+32+32+32+8+8
 # - Electra: 256*(112+4+616+128+40)/1024*28/1024
 #   616 = 32+20+32+32+256+32+8+8+8+8+4+32+32+32+32+32+8+8
+# - Gloas: 256*(112+32+4+192+40)/1024*28/1024
 #
 # Committee branch computations:
 # - Altair: 256*(5*32+8)/1024*28/1024
@@ -99,6 +102,7 @@ logScope: topics = "lcdata"
 # - Capella: (4+844+24624+5*32+4+844+6*32+112+8+9)/1024*28/1024
 # - Deneb: (4+860+24624+5*32+4+860+6*32+112+8+9)/1024*28/1024
 # - Electra: (4+860+24624+6*32+4+860+7*32+112+8+9)/1024*28/1024
+# - Gloas: (4+340+24624+6*32+4+340+7*32+112+8+9)/1024*28/1024
 
 type
   LightClientHeaderStore = object
@@ -675,6 +679,7 @@ type LightClientDataDBNames* = object
   capellaHeaders*: string
   denebHeaders*: string
   electraHeaders*: string
+  gloasHeaders*: string
   altairCurrentBranches*: string
   electraCurrentBranches*: string
   altairSyncCommittees*: string
@@ -685,7 +690,7 @@ type LightClientDataDBNames* = object
 proc initLightClientDataDB*(
     backend: SqStoreRef,
     names: LightClientDataDBNames): KvResult[LightClientDataDB] =
-  static: doAssert LightClientDataFork.high == LightClientDataFork.Electra
+  static: doAssert LightClientDataFork.high == LightClientDataFork.Gloas
   let
     headers = [
       # LightClientDataFork.None
@@ -702,6 +707,9 @@ proc initLightClientDataDB*(
       # LightClientDataFork.Electra
       ? backend.initHeadersStore(
         names.electraHeaders, "electra.LightClientHeader"),
+      # LightClientDataFork.Gloas
+      ? backend.initHeadersStore(
+        names.gloasHeaders, "gloas.LightClientHeader"),
     ]
     currentBranches = [
       # BranchFork.None

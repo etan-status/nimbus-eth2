@@ -513,6 +513,8 @@ proc addHeadExecutionPayload*(
   if not (
     signedBlock.message.slot == envelopeSlot and
     signedBlock.root == envelopeBlockRoot and
+    signedBlock.message.parent_root ==
+      signedEnvelope.message.parent_beacon_block_root and
     bid.builder_index == signedEnvelope.message.builder_index and
     bid.block_hash == signedEnvelope.message.payload.block_hash
   ):
@@ -598,7 +600,7 @@ proc addBackfillExecutionPayload*(
   if dag.db.containsExecutionPayloadEnvelope(blockRoot):
     return err(VerifierError.Duplicate)
 
-  let (builderIdx, bidBuilderIdx) = block:
+  let (builderIdx, bidBuilderIdx, blockParentRoot) = block:
     let forkedBlck = dag.getForkedBlock(bsi.bid).valueOr:
       # The block should exist as we have checked above. Database may be
       # corrupted.
@@ -608,12 +610,17 @@ proc addBackfillExecutionPayload*(
       when consensusFork >= ConsensusFork.Gloas:
         template bid(): auto =
           forkyBlck.message.body.signed_execution_payload_bid
-        (forkyBlck.builder_index, bid.message.builder_index)
+        (forkyBlck.builder_index, bid.message.builder_index,
+          forkyBlck.message.parent_root)
       else:
         return err(VerifierError.UnviableFork)
 
   # Check builder index is matched with the block
   if bidBuilderIdx != envelope.builder_index:
+    return err(VerifierError.Invalid)
+
+  # Check parent_beacon_block_root matches the block's parent_root
+  if blockParentRoot != envelope.parent_beacon_block_root:
     return err(VerifierError.Invalid)
 
   # Verify signature
